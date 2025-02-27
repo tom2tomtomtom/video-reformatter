@@ -9,6 +9,16 @@ const Home = () => {
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [showFallbackButton, setShowFallbackButton] = useState(false)
+  
+  // After 3 seconds, show the fallback button in case the main button has issues
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowFallbackButton(true)
+    }, 3000)
+    
+    return () => clearTimeout(timer)
+  }, [])
   
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     // Reset any previous errors
@@ -49,13 +59,25 @@ const Home = () => {
     }
   }, [])
   
+  // Using a direct DOM approach as another fallback
+  const manualClickHandler = () => {
+    console.log("Manual click handler")
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+      fileInputRef.current.click()
+    }
+  }
+  
   // Add direct DOM event listener as a fallback
   useEffect(() => {
     const buttonElement = document.getElementById('upload-button')
     if (buttonElement) {
       const clickHandler = () => {
         console.log("Direct click handler")
-        fileInputRef.current?.click()
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+          fileInputRef.current.click()
+        }
       }
       
       buttonElement.addEventListener('click', clickHandler)
@@ -94,13 +116,20 @@ const Home = () => {
               Upload Video
             </Button>
             
-            {/* Fallback HTML button in case the Button component has issues */}
-            <button 
-              className="hidden mt-2 bg-green-600 text-white px-4 py-2 rounded"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Alternative Upload Button
-            </button>
+            {/* Plain HTML fallback button */}
+            {showFallbackButton && (
+              <div className="mt-4 p-3 bg-yellow-50 rounded text-center">
+                <p className="text-sm text-yellow-700 mb-2">
+                  If the button above doesn't work, please try this alternative:
+                </p>
+                <button 
+                  className="bg-green-600 text-white px-6 py-3 rounded font-medium hover:bg-green-700"
+                  onClick={manualClickHandler}
+                >
+                  Alternative Upload Button
+                </button>
+              </div>
+            )}
             
             <p className="text-sm text-gray-500 mt-2">Supported formats: MP4, MOV, WebM (max 1GB)</p>
             
