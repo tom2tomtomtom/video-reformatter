@@ -142,14 +142,17 @@ const FocusSelector = () => {
             onMouseUp={handleContainerMouseUp}
             onMouseLeave={handleContainerMouseUp}
           >
-            {/* Video placeholder - in a real implementation, this would be the actual video frame */}
-            {url && (
-              <img 
-                src={url} 
-                alt="Video frame"
-                className="w-full h-full object-contain"
-              />
-            )}
+            {/* Video frame placeholder - since we can't display the video frame directly, 
+                we'll use a placeholder with instructions */}
+            <div className="w-full h-full flex items-center justify-center bg-gray-800">
+              <p className="text-white text-center p-4">
+                Current frame at {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')}
+                <br />
+                <span className="text-gray-300 text-sm">
+                  Click and drag to define a focus area
+                </span>
+              </p>
+            </div>
             
             {/* Active selection rectangle */}
             {isSelecting && (
