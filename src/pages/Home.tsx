@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { setVideoUrl } from '../store/slices/videoSlice'
@@ -8,23 +8,62 @@ const Home = () => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    // Reset any previous errors
+    setUploadError(null)
+    
     const file = e.target.files?.[0]
     if (!file) return
     
-    // For demonstration, create a local URL for the video file
-    const url = URL.createObjectURL(file)
-    dispatch(setVideoUrl(url))
+    console.log("File selected:", file.name, file.type) // Debug log
     
-    // Navigate to editor
-    navigate('/editor')
+    // Check if the file is a video
+    if (!file.type.startsWith('video/')) {
+      setUploadError('Please select a valid video file.')
+      return
+    }
+    
+    try {
+      // For demonstration, create a local URL for the video file
+      const url = URL.createObjectURL(file)
+      console.log("File URL created:", url) // Debug log
+      dispatch(setVideoUrl(url))
+      
+      // Navigate to editor
+      navigate('/editor')
+    } catch (error) {
+      console.error("Error handling file:", error)
+      setUploadError('Failed to process the video file. Please try again.')
+    }
   }, [dispatch, navigate])
   
-  const handleButtonClick = () => {
-    // Trigger the file input click
-    fileInputRef.current?.click()
-  }
+  const handleButtonClick = useCallback(() => {
+    console.log("Upload button clicked") // Debug log
+    // Reset file input value to ensure onChange fires even if the same file is selected
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+      // Trigger the file input click
+      fileInputRef.current.click()
+    }
+  }, [])
+  
+  // Add direct DOM event listener as a fallback
+  useEffect(() => {
+    const buttonElement = document.getElementById('upload-button')
+    if (buttonElement) {
+      const clickHandler = () => {
+        console.log("Direct click handler")
+        fileInputRef.current?.click()
+      }
+      
+      buttonElement.addEventListener('click', clickHandler)
+      return () => {
+        buttonElement.removeEventListener('click', clickHandler)
+      }
+    }
+  }, [])
   
   return (
     <div className="container mx-auto px-4 py-12">
@@ -43,7 +82,10 @@ const Home = () => {
               className="hidden"
               onChange={handleFileUpload}
             />
+            
+            {/* Regular button implementation */}
             <Button 
+              id="upload-button"
               variant="primary" 
               size="lg" 
               fullWidth
@@ -51,7 +93,20 @@ const Home = () => {
             >
               Upload Video
             </Button>
+            
+            {/* Fallback HTML button in case the Button component has issues */}
+            <button 
+              className="hidden mt-2 bg-green-600 text-white px-4 py-2 rounded"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Alternative Upload Button
+            </button>
+            
             <p className="text-sm text-gray-500 mt-2">Supported formats: MP4, MOV, WebM (max 1GB)</p>
+            
+            {uploadError && (
+              <p className="text-red-500 mt-2">{uploadError}</p>
+            )}
           </div>
         </div>
         
