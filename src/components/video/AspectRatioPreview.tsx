@@ -70,15 +70,21 @@ const AspectRatioPreview: React.FC<AspectRatioPreviewProps> = ({ ratio, width })
         className="overflow-hidden"
         style={{ width: `${width}px`, height: `${height}px` }}
       >
-        {/* This would be your actual video frame, using an image for example */}
-        {url && (
-          <img 
-            src={url} 
-            alt="Video frame"
-            className="object-cover w-full h-full"
-            style={getCropStyles()}
-          />
-        )}
+        {/* Instead of trying to use the video URL as an image source, we'll show a placeholder */}
+        <div 
+          className="bg-gray-800 w-full h-full flex items-center justify-center"
+          style={getCropStyles()}
+        >
+          <div className="text-center text-white text-xs">
+            <p>{ratio} Preview</p>
+            {selectedPoint && (
+              <p className="text-gray-300 mt-1">
+                Focus: {selectedPoint.description.substring(0, 20)}
+                {selectedPoint.description.length > 20 ? '...' : ''}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
