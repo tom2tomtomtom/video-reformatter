@@ -13,8 +13,75 @@ const FocusSelector = () => {
   const [selectionStart, setSelectionStart] = useState({ x: 0, y: 0 })
   const [selectionEnd, setSelectionEnd] = useState({ x: 0, y: 0 })
   const [focusDescription, setFocusDescription] = useState('')
+  const [currentFrameUrl, setCurrentFrameUrl] = useState('')
   
   const containerRef = useRef<HTMLDivElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  
+  // Function to capture the current frame from the video
+  const captureVideoFrame = useCallback(() => {
+    if (!videoRef.current || !url) return
+    
+    try {
+      const video = videoRef.current
+      const canvas = document.createElement('canvas')
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      const dataUrl = canvas.toDataURL('image/jpeg')
+      setCurrentFrameUrl(dataUrl)
+    } catch (err) {
+      console.error('Error capturing video frame:', err)
+    }
+  }, [url])
+  
+  // Set up the video element and update it when the URL changes
+  useEffect(() => {
+    if (!url) {
+      setCurrentFrameUrl('')
+      return
+    }
+    
+    if (videoRef.current) {
+      videoRef.current.src = url
+      videoRef.current.currentTime = currentTime
+    }
+  }, [url])
+  
+  // Update video time when currentTime changes
+  useEffect(() => {
+    if (videoRef.current && Math.abs(videoRef.current.currentTime - currentTime) > 0.2) {
+      videoRef.current.currentTime = currentTime
+    }
+  }, [currentTime])
+  
+  // Capture frame when the video is ready or time changes
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    
+    const handleTimeUpdate = () => {
+      captureVideoFrame()
+    }
+    
+    const handleSeeked = () => {
+      captureVideoFrame()
+    }
+    
+    video.addEventListener('timeupdate', handleTimeUpdate)
+    video.addEventListener('seeked', handleSeeked)
+    video.addEventListener('loadeddata', captureVideoFrame)
+    
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate)
+      video.removeEventListener('seeked', handleSeeked)
+      video.removeEventListener('loadeddata', captureVideoFrame)
+    }
+  }, [captureVideoFrame])
   
   const handleDelete = useCallback((id: string) => {
     dispatch(removeFocusPoint(id))
@@ -102,7 +169,7 @@ const FocusSelector = () => {
   const { left, top, width, height } = calculateSelectionCoords()
   const showSelectionForm = !isSelecting && width > 5 && height > 5
   
-  // Simple marker to represent a focus point (in real app you'd use FocusPointMarker component)
+  // Simple marker to represent a focus point
   const FocusPointMarker = ({ point }: { point: FocusPoint }) => (
     <div 
       className="absolute border-2 border-yellow-500 rounded cursor-move"
@@ -126,6 +193,14 @@ const FocusSelector = () => {
     <div className="mt-4">
       <h2 className="text-lg font-semibold mb-2">Focus Points</h2>
       
+      {/* Hidden video element for frame capture */}
+      <video 
+        ref={videoRef} 
+        style={{ display: 'none' }} 
+        muted 
+        playsInline
+      ></video>
+      
       {!url ? (
         <p className="text-gray-500">Please load a video to add focus points.</p>
       ) : (
@@ -142,17 +217,20 @@ const FocusSelector = () => {
             onMouseUp={handleContainerMouseUp}
             onMouseLeave={handleContainerMouseUp}
           >
-            {/* Video frame placeholder - since we can't display the video frame directly, 
-                we'll use a placeholder with instructions */}
-            <div className="w-full h-full flex items-center justify-center bg-gray-800">
-              <p className="text-white text-center p-4">
-                Current frame at {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')}
-                <br />
-                <span className="text-gray-300 text-sm">
-                  Click and drag to define a focus area
-                </span>
-              </p>
-            </div>
+            {/* Video frame display */}
+            {currentFrameUrl ? (
+              <img 
+                src={currentFrameUrl} 
+                alt="Current video frame" 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gray-800">
+                <p className="text-white text-center p-4">
+                  Current frame at {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')}
+                </p>
+              </div>
+            )}
             
             {/* Active selection rectangle */}
             {isSelecting && (
