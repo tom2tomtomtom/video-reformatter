@@ -3,6 +3,7 @@ import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { setVideoUrl } from '../store/slices/videoSlice'
 import Button from '../components/common/Button'
+import FileUploader from '../components/common/FileUploader'
 
 const Home = () => {
   const dispatch = useDispatch()
@@ -20,12 +21,9 @@ const Home = () => {
     return () => clearTimeout(timer)
   }, [])
   
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback((file: File) => {
     // Reset any previous errors
     setUploadError(null)
-    
-    const file = e.target.files?.[0]
-    if (!file) return
     
     console.log("File selected:", file.name, file.type) // Debug log
     
@@ -49,6 +47,13 @@ const Home = () => {
     }
   }, [dispatch, navigate])
   
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      handleFileSelect(file)
+    }
+  }, [handleFileSelect])
+  
   const handleButtonClick = useCallback(() => {
     console.log("Upload button clicked") // Debug log
     // Reset file input value to ensure onChange fires even if the same file is selected
@@ -56,34 +61,6 @@ const Home = () => {
       fileInputRef.current.value = ''
       // Trigger the file input click
       fileInputRef.current.click()
-    }
-  }, [])
-  
-  // Using a direct DOM approach as another fallback
-  const manualClickHandler = () => {
-    console.log("Manual click handler")
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-      fileInputRef.current.click()
-    }
-  }
-  
-  // Add direct DOM event listener as a fallback
-  useEffect(() => {
-    const buttonElement = document.getElementById('upload-button')
-    if (buttonElement) {
-      const clickHandler = () => {
-        console.log("Direct click handler")
-        if (fileInputRef.current) {
-          fileInputRef.current.value = ''
-          fileInputRef.current.click()
-        }
-      }
-      
-      buttonElement.addEventListener('click', clickHandler)
-      return () => {
-        buttonElement.removeEventListener('click', clickHandler)
-      }
     }
   }, [])
   
@@ -97,6 +74,7 @@ const Home = () => {
           </p>
           
           <div className="max-w-md mx-auto">
+            {/* Original approach (if it doesn't work, it will be supplemented by the components below) */}
             <input
               ref={fileInputRef}
               type="file"
@@ -105,18 +83,33 @@ const Home = () => {
               onChange={handleFileUpload}
             />
             
-            {/* Regular button implementation */}
-            <Button 
-              id="upload-button"
-              variant="primary" 
-              size="lg" 
-              fullWidth
-              onClick={handleButtonClick}
-            >
-              Upload Video
-            </Button>
+            {/* Primary Upload Button - Custom FileUploader component */}
+            <div className="mb-4">
+              <FileUploader
+                onFileSelected={handleFileSelect}
+                accept="video/*"
+                label="Upload Video"
+                className="mb-2"
+              />
+              <p className="text-sm text-gray-500">
+                Supported formats: MP4, MOV, WebM (max 1GB)
+              </p>
+            </div>
             
-            {/* Plain HTML fallback button */}
+            {/* Original Button implementation as backup */}
+            <div className="hidden">
+              <Button 
+                id="upload-button"
+                variant="primary" 
+                size="lg" 
+                fullWidth
+                onClick={handleButtonClick}
+              >
+                Upload Video
+              </Button>
+            </div>
+            
+            {/* Plain HTML fallback button as last resort */}
             {showFallbackButton && (
               <div className="mt-4 p-3 bg-yellow-50 rounded text-center">
                 <p className="text-sm text-yellow-700 mb-2">
@@ -124,14 +117,12 @@ const Home = () => {
                 </p>
                 <button 
                   className="bg-green-600 text-white px-6 py-3 rounded font-medium hover:bg-green-700"
-                  onClick={manualClickHandler}
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   Alternative Upload Button
                 </button>
               </div>
             )}
-            
-            <p className="text-sm text-gray-500 mt-2">Supported formats: MP4, MOV, WebM (max 1GB)</p>
             
             {uploadError && (
               <p className="text-red-500 mt-2">{uploadError}</p>
