@@ -84,13 +84,33 @@ video-reformatter/
 ├── src/
 │   ├── components/
 │   │   ├── common/          # Reusable UI components
+│   │   │   ├── Button.tsx   # Custom button component
+│   │   │   ├── Loader.tsx   # Loading indicator
+│   │   │   └── Modal.tsx    # Modal dialog component
 │   │   ├── layout/          # Layout components
+│   │   │   ├── Header.tsx   # App header with navigation
+│   │   │   └── Footer.tsx   # App footer
 │   │   ├── video/           # Video playback and processing
+│   │   │   ├── VideoPlayer.tsx       # Main video player
+│   │   │   ├── VideoTimeline.tsx     # Timeline navigation
+│   │   │   ├── AspectRatioPreview.tsx # Format previews
+│   │   │   └── VideoExporter.tsx     # Video export functionality
 │   │   └── editor/          # Focus point editing tools
+│   │       └── FocusSelector.tsx     # Focus point creation UI
 │   ├── pages/               # Main application pages
+│   │   ├── Home.tsx         # Landing page with upload
+│   │   ├── Editor.tsx       # Video editing interface
+│   │   ├── Projects.tsx     # Project management
+│   │   └── Export.tsx       # Export configuration
 │   ├── store/               # Redux store configuration
+│   │   ├── index.ts         # Store setup
 │   │   └── slices/          # Redux slices for state
-│   └── ...
+│   │       ├── videoSlice.ts         # Video playback state
+│   │       ├── focusPointsSlice.ts   # Focus points data
+│   │       └── projectsSlice.ts      # Project management
+│   ├── main.tsx             # App entry point
+│   ├── App.tsx              # Main application component
+│   └── index.css            # Global styles with Tailwind
 └── ...
 ```
 
@@ -102,12 +122,80 @@ video-reformatter/
 4. **Preview:** Application displays how content will appear across formats
 5. **Export:** Processes video for multiple platforms using FFmpeg
 
+## 🧠 How Focus Tracking Works
+
+The focus tracking system uses a combination of manual selection and intelligent transformation:
+
+1. **Focus Point Definition**
+   - Users identify important subjects by drawing bounding boxes
+   - Each focus point includes:
+     - X/Y coordinates (percentage-based for responsiveness)
+     - Width/height dimensions
+     - Start and end timestamps
+     - Description of the subject
+
+2. **Aspect Ratio Transformation**
+   - For each target format (9:16, 1:1, 4:5), the app calculates:
+     - Scale factor based on source vs target ratio
+     - Transform origin based on focus point coordinates
+     - Optimal cropping to maintain subject visibility
+
+3. **Timeline Integration**
+   - The app automatically transitions between focus points as the video plays
+   - Visual timeline markers show when focus points are active
+   - Smooth transitions prevent jarring changes
+
+4. **Export Processing**
+   - FFmpeg WebAssembly processes the video client-side (no server needed)
+   - Each format is rendered with dynamic cropping based on focus points
+   - Video data is processed in chunks to handle large files
+
 ## 🌱 Future Enhancements
 
 - **AI-powered subject detection** to automatically identify speakers and important elements
 - **Cloud-based processing** for handling larger videos
 - **Collaboration features** for team-based workflow
 - **Direct publishing** to social media platforms
+- **Frame extraction** for better editing precision
+- **Automatic scene detection** to suggest focus points
+
+## 🔧 Advanced Configuration
+
+### Video Processing Settings
+
+To optimize video output quality, the FFmpeg processing pipeline can be configured:
+
+```javascript
+// Example custom configuration
+const ffmpegConfig = {
+  codec: 'h264',           // Video codec
+  preset: 'medium',        // Encoding speed/quality balance
+  crf: 23,                 // Quality factor (lower = better quality)
+  pixelFormat: 'yuv420p',  // Pixel format for compatibility
+};
+```
+
+### Focus Point Fine-Tuning
+
+Advanced users can manually edit JSON configuration for precise control:
+
+```json
+{
+  "focusPoints": [
+    {
+      "id": "focus-1",
+      "timeStart": 15.5,
+      "timeEnd": 22.8,
+      "x": 25,
+      "y": 30,
+      "width": 50,
+      "height": 40,
+      "description": "Character A speaking",
+      "easing": "ease-in-out"
+    }
+  ]
+}
+```
 
 ## 📄 License
 
@@ -115,9 +203,11 @@ MIT
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome!
+Contributions, issues, and feature requests are welcome! See our contribution guidelines for more information.
 
 ## Acknowledgements
 
 - FFmpeg for video processing
 - React and Vite teams for excellent development tools
+- TailwindCSS for styling utilities
+- Redux Toolkit for state management
