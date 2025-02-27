@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { setVideoUrl } from '../store/slices/videoSlice'
@@ -7,6 +7,7 @@ import Button from '../components/common/Button'
 const Home = () => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -20,6 +21,11 @@ const Home = () => {
     navigate('/editor')
   }, [dispatch, navigate])
   
+  const handleButtonClick = () => {
+    // Trigger the file input click
+    fileInputRef.current?.click()
+  }
+  
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-4xl mx-auto">
@@ -30,17 +36,21 @@ const Home = () => {
           </p>
           
           <div className="max-w-md mx-auto">
-            <label className="block w-full">
-              <input
-                type="file"
-                accept="video/*"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
-              <Button variant="primary" size="lg" fullWidth>
-                Upload Video
-              </Button>
-            </label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+            <Button 
+              variant="primary" 
+              size="lg" 
+              fullWidth
+              onClick={handleButtonClick}
+            >
+              Upload Video
+            </Button>
             <p className="text-sm text-gray-500 mt-2">Supported formats: MP4, MOV, WebM (max 1GB)</p>
           </div>
         </div>
