@@ -4,11 +4,24 @@ import { RootState } from '../../store'
 import { addFocusPoint, FocusPoint, removeFocusPoint } from '../../store/slices/focusPointsSlice'
 import Button from '../common/Button'
 import SubjectDetectionService, { DetectionResult } from '../../services/SubjectDetectionService'
+import VideoScannerService from '../../services/VideoScannerService'
+import { 
+  startScan, 
+  updateScanProgress, 
+  setDetectedSubjects, 
+  setPendingFocusPoints, 
+  completeScan, 
+  setScanError 
+} from '../../store/slices/videoScanSlice'
+import ProgressIndicator from '../common/ProgressIndicator'
+import ScanConfigPanel from './ScanConfigPanel'
+import ScanReviewPanel from './ScanReviewPanel'
 
 const FocusSelector = () => {
   const dispatch = useDispatch()
   const { url, currentTime, duration } = useSelector((state: RootState) => state.video)
   const { points } = useSelector((state: RootState) => state.focusPoints)
+  const { scanning, progress, scanComplete, error } = useSelector((state: RootState) => state.videoScan)
   
   const [isSelecting, setIsSelecting] = useState(false)
   const [selectionStart, setSelectionStart] = useState({ x: 0, y: 0 })
@@ -186,7 +199,7 @@ const FocusSelector = () => {
     setFocusDescription('')
   }
 
-  // Handle AI subject detection
+  // Handle AI subject detection for current frame
   const handleDetectSubjects = async () => {
     if (!canvasRef.current || !url) return
 
@@ -258,6 +271,63 @@ const FocusSelector = () => {
   // Handle rejecting AI suggestions
   const handleRejectDetection = () => {
     setDetectedObjects(null)
+  }
+  
+  // Handle scanning the entire video
+  const handleScanVideo = async () => {
+    if (!videoRef.current || !url || scanning) return
+    
+    try {
+      // Initialize scanner with video element
+      VideoScannerService.initialize(videoRef.current)
+      
+      // Dispatch action to indicate scanning started
+      dispatch(startScan())
+      
+      // Get scan configuration from Redux store
+      const scanConfig = useSelector((state: RootState) => state.videoScan.config)
+      
+      // Start the scan
+      const detectedSubjects = await VideoScannerService.scanVideo(duration, {
+        interval: scanConfig.interval,
+        minScore: scanConfig.minConfidence,
+        similarityThreshold: scanConfig.similarityThreshold,
+        minDetections: scanConfig.minDetections,
+        onProgress: (progress) => {
+          dispatch(updateScanProgress({
+            currentFrame: progress.currentFrame,
+            totalFrames: progress.totalFrames,
+            percentComplete: progress.percentComplete,
+            estimatedTimeRemaining: progress.estimatedTimeRemaining
+          }))
+        }
+      })
+      
+      if (detectedSubjects.length === 0) {
+        dispatch(setScanError('No subjects were detected consistently throughout the video.'))
+        return
+      }
+      
+      // Store detected subjects
+      dispatch(setDetectedSubjects(detectedSubjects))
+      
+      // Convert subjects to focus points
+      const focusPoints = VideoScannerService.convertSubjectsToFocusPoints(
+        detectedSubjects,
+        videoRef.current.videoWidth,
+        videoRef.current.videoHeight
+      )
+      
+      // Store pending focus points
+      dispatch(setPendingFocusPoints(focusPoints))
+      
+      // Mark scan as complete
+      dispatch(completeScan())
+      
+    } catch (error) {
+      console.error('Error scanning video:', error)
+      dispatch(setScanError((error as Error).message || 'Failed to scan video'))
+    }
   }
   
   const { left, top, width, height } = calculateSelectionCoords()
@@ -333,17 +403,61 @@ const FocusSelector = () => {
         <p className="text-gray-500">Please load a video to add focus points.</p>
       ) : (
         <>
+          {/* Video Scan Configuration Panel */}
+          {!scanning && !scanComplete && (
+            <ScanConfigPanel 
+              onStartScan={handleScanVideo} 
+              disabled={scanning || isDetecting} 
+            />
+          )}
+          
+          {/* Scan Progress */}
+          {scanning && (
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded">
+              <h3 className="text-md font-medium mb-2">Video Scan in Progress</h3>
+              <ProgressIndicator 
+                progress={progress.percentComplete} 
+                label={`Processing frame ${progress.currentFrame} of ${progress.totalFrames}`}
+                showTime={true}
+                timeRemaining={progress.estimatedTimeRemaining}
+              />
+              <p className="text-sm text-gray-600 mt-2">
+                Please wait while we scan your video for subjects. This may take a few minutes for longer videos.
+              </p>
+            </div>
+          )}
+          
+          {/* Scan Error */}
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded">
+              <h3 className="text-md font-medium text-red-700 mb-1">Error During Video Scan</h3>
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+          
+          {/* Review Panel */}
+          {scanComplete && <ScanReviewPanel />}
+          
           <div className="flex justify-between items-center mb-3">
             <p className="text-sm">
               Click and drag on the video to define focus areas for different aspect ratios.
             </p>
-            <Button 
-              onClick={handleDetectSubjects} 
-              variant="primary"
-              disabled={isDetecting}
-            >
-              {isDetecting ? 'Detecting...' : 'Detect Subjects'}
-            </Button>
+            <div className="flex space-x-2">
+              <Button 
+                onClick={handleDetectSubjects} 
+                variant="secondary"
+                disabled={isDetecting || scanning}
+              >
+                {isDetecting ? 'Detecting...' : 'Detect Subjects'}
+              </Button>
+              <Button 
+                onClick={handleScanVideo} 
+                variant="primary"
+                disabled={scanning || isDetecting}
+              >
+                Scan Entire Video
+              </Button>
+            </div>
           </div>
           
           <div 
