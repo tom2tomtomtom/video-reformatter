@@ -3,10 +3,11 @@ import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '../../store'
 import { addFocusPoint, FocusPoint, removeFocusPoint } from '../../store/slices/focusPointsSlice'
 import Button from '../common/Button'
+import SubjectDetectionService, { DetectionResult } from '../../services/SubjectDetectionService'
 
 const FocusSelector = () => {
   const dispatch = useDispatch()
-  const { url, currentTime } = useSelector((state: RootState) => state.video)
+  const { url, currentTime, duration } = useSelector((state: RootState) => state.video)
   const { points } = useSelector((state: RootState) => state.focusPoints)
   
   const [isSelecting, setIsSelecting] = useState(false)
@@ -14,9 +15,13 @@ const FocusSelector = () => {
   const [selectionEnd, setSelectionEnd] = useState({ x: 0, y: 0 })
   const [focusDescription, setFocusDescription] = useState('')
   const [currentFrameUrl, setCurrentFrameUrl] = useState('')
+  const [isDetecting, setIsDetecting] = useState(false)
+  const [detectedObjects, setDetectedObjects] = useState<DetectionResult | null>(null)
+  const [detectionError, setDetectionError] = useState<string | null>(null)
   
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   
   // Function to capture the current frame from the video
   const captureVideoFrame = useCallback(() => {
@@ -24,15 +29,24 @@ const FocusSelector = () => {
     
     try {
       const video = videoRef.current
-      const canvas = document.createElement('canvas')
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
       
-      const ctx = canvas.getContext('2d')
+      // Initialize canvas if needed
+      if (!canvasRef.current) {
+        const canvas = document.createElement('canvas')
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        canvasRef.current = canvas
+      } else {
+        // Update canvas dimensions if needed
+        canvasRef.current.width = video.videoWidth
+        canvasRef.current.height = video.videoHeight
+      }
+      
+      const ctx = canvasRef.current.getContext('2d')
       if (!ctx) return
       
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-      const dataUrl = canvas.toDataURL('image/jpeg')
+      ctx.drawImage(video, 0, 0, canvasRef.current.width, canvasRef.current.height)
+      const dataUrl = canvasRef.current.toDataURL('image/jpeg')
       setCurrentFrameUrl(dataUrl)
     } catch (err) {
       console.error('Error capturing video frame:', err)
@@ -82,6 +96,12 @@ const FocusSelector = () => {
       video.removeEventListener('loadeddata', captureVideoFrame)
     }
   }, [captureVideoFrame])
+
+  // Reset detected objects when time changes
+  useEffect(() => {
+    setDetectedObjects(null)
+    setDetectionError(null)
+  }, [currentTime])
   
   const handleDelete = useCallback((id: string) => {
     dispatch(removeFocusPoint(id))
@@ -165,6 +185,80 @@ const FocusSelector = () => {
     setSelectionEnd({ x: 0, y: 0 })
     setFocusDescription('')
   }
+
+  // Handle AI subject detection
+  const handleDetectSubjects = async () => {
+    if (!canvasRef.current || !url) return
+
+    try {
+      setIsDetecting(true)
+      setDetectionError(null)
+
+      // Ensure we have the latest frame
+      captureVideoFrame()
+
+      // Wait for the canvas to be updated
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      // Load TF.js model if not already loaded
+      await SubjectDetectionService.loadModel()
+
+      // Perform detection
+      const result = await SubjectDetectionService.detectObjects(canvasRef.current)
+      
+      if (result.error) {
+        setDetectionError(result.error)
+        setDetectedObjects(null)
+      } else {
+        setDetectedObjects(result)
+      }
+    } catch (error) {
+      console.error('Error detecting subjects:', error)
+      setDetectionError('Failed to detect subjects. Please try again.')
+      setDetectedObjects(null)
+    } finally {
+      setIsDetecting(false)
+    }
+  }
+
+  // Add detected objects as focus points
+  const handleAcceptDetection = (objectId?: string) => {
+    if (!detectedObjects) return
+
+    const focusPointsToAdd = detectedObjects.objects
+      // Filter by objectId if provided
+      .filter(obj => !objectId || obj.id === objectId)
+      // Convert to focus points format
+      .map(obj => {
+        const [x, y, width, height] = obj.bbox
+        
+        return {
+          id: `focus-${Date.now()}-${obj.id}`,
+          timeStart: currentTime,
+          timeEnd: currentTime + 5, // Default 5 seconds duration
+          x: (x / detectedObjects.imageWidth) * 100,
+          y: (y / detectedObjects.imageHeight) * 100,
+          width: (width / detectedObjects.imageWidth) * 100,
+          height: (height / detectedObjects.imageHeight) * 100,
+          description: `${obj.class} (${Math.round(obj.score * 100)}% confidence)`
+        }
+      })
+
+    // Add each focus point to the store
+    focusPointsToAdd.forEach(point => {
+      dispatch(addFocusPoint(point))
+    })
+
+    // If we added the specific object or all objects, clear the detection
+    if (objectId || focusPointsToAdd.length === detectedObjects.objects.length) {
+      setDetectedObjects(null)
+    }
+  }
+
+  // Handle rejecting AI suggestions
+  const handleRejectDetection = () => {
+    setDetectedObjects(null)
+  }
   
   const { left, top, width, height } = calculateSelectionCoords()
   const showSelectionForm = !isSelecting && width > 5 && height > 5
@@ -188,6 +282,40 @@ const FocusSelector = () => {
       </button>
     </div>
   )
+
+  // Component to display detected objects
+  const DetectedObjectMarker = ({ 
+    object, 
+    onAccept 
+  }: { 
+    object: { id: string; class: string; score: number; bbox: [number, number, number, number] }; 
+    onAccept: () => void
+  }) => {
+    const [x, y, width, height] = object.bbox
+    const confidence = Math.round(object.score * 100)
+    
+    return (
+      <div 
+        className="absolute border-2 border-blue-500 bg-blue-500 bg-opacity-20 rounded-md"
+        style={{
+          left: `${(x / detectedObjects!.imageWidth) * 100}%`,
+          top: `${(y / detectedObjects!.imageHeight) * 100}%`,
+          width: `${(width / detectedObjects!.imageWidth) * 100}%`,
+          height: `${(height / detectedObjects!.imageHeight) * 100}%`,
+        }}
+      >
+        <div className="absolute top-0 left-0 -mt-7 bg-blue-600 text-white text-xs p-1 rounded">
+          {object.class} ({confidence}%)
+          <button 
+            className="ml-2 bg-green-500 text-white rounded px-1"
+            onClick={onAccept}
+          >
+            Add
+          </button>
+        </div>
+      </div>
+    )
+  }
   
   return (
     <div className="mt-4">
@@ -205,9 +333,18 @@ const FocusSelector = () => {
         <p className="text-gray-500">Please load a video to add focus points.</p>
       ) : (
         <>
-          <p className="text-sm mb-3">
-            Click and drag on the video to define focus areas for different aspect ratios.
-          </p>
+          <div className="flex justify-between items-center mb-3">
+            <p className="text-sm">
+              Click and drag on the video to define focus areas for different aspect ratios.
+            </p>
+            <Button 
+              onClick={handleDetectSubjects} 
+              variant="primary"
+              disabled={isDetecting}
+            >
+              {isDetecting ? 'Detecting...' : 'Detect Subjects'}
+            </Button>
+          </div>
           
           <div 
             ref={containerRef}
@@ -252,7 +389,48 @@ const FocusSelector = () => {
                 point={point}
               />
             ))}
+
+            {/* AI detected objects */}
+            {detectedObjects && detectedObjects.objects.map(obj => (
+              <DetectedObjectMarker
+                key={obj.id}
+                object={obj}
+                onAccept={() => handleAcceptDetection(obj.id)}
+              />
+            ))}
           </div>
+
+          {/* Detection error message */}
+          {detectionError && (
+            <div className="mt-2 p-2 bg-red-100 border border-red-300 text-red-700 rounded">
+              {detectionError}
+            </div>
+          )}
+
+          {/* Accept/Reject All Detections */}
+          {detectedObjects && detectedObjects.objects.length > 0 && (
+            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded">
+              <p className="text-sm">
+                {detectedObjects.objects.length} {detectedObjects.objects.length === 1 ? 'subject' : 'subjects'} detected.
+              </p>
+              <div className="flex mt-2 space-x-2">
+                <Button 
+                  onClick={() => handleAcceptDetection()} 
+                  variant="primary"
+                  className="text-sm"
+                >
+                  Accept All
+                </Button>
+                <Button 
+                  onClick={handleRejectDetection} 
+                  variant="secondary"
+                  className="text-sm"
+                >
+                  Reject All
+                </Button>
+              </div>
+            </div>
+          )}
           
           {/* Selection form */}
           {showSelectionForm && (
