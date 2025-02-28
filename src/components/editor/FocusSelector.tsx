@@ -233,7 +233,7 @@ const FocusSelector: React.FC = () => {
         <div className="flex gap-2 mb-2">
           <Button
             onClick={detectSubjects}
-            disabled={isDetecting || !url || isScanning}
+            disabled={isDetecting || isScanning}
             className="px-4 py-2 bg-blue-600 text-white rounded-md"
           >
             {isDetecting ? 'Detecting...' : 'Detect Subjects'}
@@ -249,7 +249,7 @@ const FocusSelector: React.FC = () => {
           ) : (
             <Button
               onClick={startVideoScan}
-              disabled={!url || isDetecting || isReviewMode}
+              disabled={isDetecting || isReviewMode}
               className="px-4 py-2 bg-green-600 text-white rounded-md"
             >
               Scan Entire Video
