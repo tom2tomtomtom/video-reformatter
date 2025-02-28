@@ -5,10 +5,10 @@ import VideoPlayer from '../components/video/VideoPlayer'
 import VideoTimeline from '../components/video/VideoTimeline'
 import FocusSelector from '../components/editor/FocusSelector'
 import AspectRatioPreview from '../components/video/AspectRatioPreview'
-import Button from '../components/common/Button'
 import TestButtons from '../components/editor/TestButtons'
 import ClickDiagnostic from '../components/editor/ClickDiagnostic'
 import DirectHTMLButtons from '../components/editor/DirectHTMLButtons'
+import DirectHtmlFocusSelector from '../components/editor/DirectHtmlFocusSelector'
 
 const Editor = () => {
   const navigate = useNavigate()
@@ -45,12 +45,13 @@ const Editor = () => {
           </button>
         </div>
         
+        {/* Diagnostic tool */}
+        <ClickDiagnostic />
+        
         {/* Test components */}
         <TestButtons />
         <DirectHTMLButtons />
-        
-        {/* Add the diagnostic component */}
-        <ClickDiagnostic />
+        <DirectHtmlFocusSelector />
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
           <div className="lg:col-span-2 relative">
