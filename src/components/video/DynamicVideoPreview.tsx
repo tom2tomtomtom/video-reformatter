@@ -77,7 +77,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
   // Update active focus point when current time changes
   useEffect(() => {
     const activePoint = points.find(
-      (point) => currentTime >= point.startTime && currentTime <= point.endTime
+      (point) => currentTime >= point.timeStart && currentTime <= point.timeEnd
     ) || null
     
     if (activePoint) {
@@ -302,7 +302,11 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
       console.log(`[${ratio}] Video can play! (one-time event)`);
       
       // Reset to beginning
-      videoElement.currentTime = 0;
+      try {
+        videoElement.currentTime = 0;
+      } catch (err) {
+        console.error(`[${ratio}] Error setting currentTime:`, err);
+      }
       
       // Update video dimensions
       if (videoElement.videoWidth && videoElement.videoHeight) {
@@ -317,6 +321,10 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
       
       // Remove this listener immediately to prevent loops
       videoElement.removeEventListener('canplay', handleCanPlay);
+    };
+    
+    const handleLoad = () => {
+      console.log(`[${ratio}] Load event fired`);
     };
     
     const handlePlay = () => {
@@ -377,6 +385,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
     
     // Add minimal event listeners
     videoElement.addEventListener('canplay', handleCanPlay);
+    videoElement.addEventListener('load', handleLoad);
     videoElement.addEventListener('error', handleError);
     videoElement.addEventListener('play', handlePlay);
     videoElement.addEventListener('pause', handlePause);
@@ -387,6 +396,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
     try {
       videoElement.crossOrigin = "anonymous";
       videoElement.src = url;
+      videoElement.currentTime = 0; // Always start from beginning
       videoElement.load();
     } catch (err) {
       console.error(`[${ratio}] Error setting video source:`, err);
@@ -396,6 +406,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
     return () => {
       isMounted = false;
       videoElement.removeEventListener('canplay', handleCanPlay);
+      videoElement.removeEventListener('load', handleLoad);
       videoElement.removeEventListener('error', handleError);
       videoElement.removeEventListener('play', handlePlay);
       videoElement.removeEventListener('pause', handlePause);
@@ -420,11 +431,16 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
       if (isPlaying) {
         console.log(`[${ratio}] Pausing video`);
         videoRef.current.pause();
+        setIsPlaying(false);
       } else {
         console.log(`[${ratio}] Playing video`);
         
         // Always reset to beginning when starting playback
-        videoRef.current.currentTime = 0;
+        try {
+          videoRef.current.currentTime = 0;
+        } catch (err) {
+          console.error(`[${ratio}] Error setting currentTime:`, err);
+        }
         
         const playPromise = videoRef.current.play();
         
@@ -432,16 +448,23 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
           playPromise
             .then(() => {
               console.log(`[${ratio}] Play successful`);
+              setIsPlaying(true);
             })
             .catch(err => {
               console.error(`[${ratio}] Play failed:`, err);
               // Try again with user interaction flag
               const userInteractionPlay = () => {
                 if (videoRef.current) {
-                  videoRef.current.currentTime = 0; // Reset time again for retry
+                  try {
+                    videoRef.current.currentTime = 0; // Reset time again for retry
+                  } catch (innerErr) {
+                    console.error(`[${ratio}] Error setting currentTime on retry:`, innerErr);
+                  }
+                  
                   videoRef.current.play()
                     .then(() => {
                       console.log(`[${ratio}] Play after user interaction successful`);
+                      setIsPlaying(true);
                     })
                     .catch(e => {
                       console.error(`[${ratio}] Play after user interaction failed:`, e);
@@ -452,13 +475,14 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
               // Try immediate retry
               userInteractionPlay();
             });
+        } else {
+          // For browsers that don't return a promise
+          setIsPlaying(true);
         }
       }
     } catch (err) {
       console.error(`[${ratio}] Error toggling play state:`, err);
     }
-    
-    setIsPlaying(!isPlaying);
   };
   
   if (!url) {
@@ -534,14 +558,23 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
             </div>
           ) : (
             // FILL VERSION (non-letterboxed)
-            <video
-              ref={videoRef}
-              className={`${isVideoReady ? '' : 'hidden'}`}
-              style={getCropStyles()}
-              preload="metadata"
-              muted
-              playsInline
-            />
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              <video
+                ref={videoRef}
+                className={`${isVideoReady ? '' : 'hidden'}`}
+                style={getCropStyles()}
+                preload="metadata"
+                muted
+                playsInline
+              />
+            </div>
           )}
           
           {isLoading && !isVideoReady && (

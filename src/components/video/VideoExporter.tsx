@@ -63,6 +63,8 @@ const VideoExporter = () => {
         return;
       }
       
+      console.log('Starting export with letterboxing:', useLetterboxing);
+      
       if (!videoExportServiceRef.current || !isFFmpegLoaded) {
         try {
           // Try to initialise again if not loaded
@@ -77,7 +79,7 @@ const VideoExporter = () => {
           return;
         }
       }
-
+      
       setIsExporting(true);
       setError(null);
       setExportErrors({});
@@ -103,6 +105,7 @@ const VideoExporter = () => {
           console.log(`Exporting ${format} with focus point:`, { x: focusX, y: focusY });
           
           // Export the video
+          console.log(`Exporting ${format} with letterboxing=${useLetterboxing} (${typeof useLetterboxing})`);
           const videoUrl = await videoExportServiceRef.current.exportVideo(
             url,
             {
@@ -110,7 +113,7 @@ const VideoExporter = () => {
               focusX: focusX || 0.5,
               focusY: focusY || 0.5,
               quality: 'medium',
-              letterbox: useLetterboxing,
+              letterbox: useLetterboxing === true,
             },
             (progress) => {
               setExportProgress(prev => ({
@@ -157,6 +160,12 @@ const VideoExporter = () => {
     } else {
       setSelectedFormats([...selectedFormats, format]);
     }
+  };
+  
+  // Toggle letterboxing option
+  const toggleLetterboxing = (value: boolean) => {
+    console.log(`Setting letterboxing to: ${value} (${typeof value})`);
+    setUseLetterboxing(value);
   };
   
   // Calculate overall progress
@@ -225,22 +234,55 @@ const VideoExporter = () => {
       </div>
       
       <div className="mb-4">
-        <div className="flex items-center">
-          <input
-            id="letterboxing"
-            name="letterboxing"
-            type="checkbox"
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            checked={useLetterboxing}
-            onChange={(e) => setUseLetterboxing(e.target.checked)}
-          />
-          <label htmlFor="letterboxing" className="ml-2 block text-sm font-medium text-gray-700">
-            Use focus-centred cropping with letterboxing (recommended)
-          </label>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Export Style
+        </label>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
+          <div 
+            className={`border p-3 rounded-lg cursor-pointer flex items-start ${useLetterboxing ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`}
+            onClick={() => toggleLetterboxing(true)}
+          >
+            <input
+              id="letterboxing-on"
+              name="export-style"
+              type="radio"
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 mt-1"
+              checked={useLetterboxing}
+              onChange={() => toggleLetterboxing(true)}
+            />
+            <div className="ml-3">
+              <label htmlFor="letterboxing-on" className="font-medium text-gray-700">
+                Letterboxed
+              </label>
+              <p className="text-sm text-gray-500">
+                Maintains entire focus area and adds black bars as needed to fit the aspect ratio.
+              </p>
+            </div>
+          </div>
+          
+          <div 
+            className={`border p-3 rounded-lg cursor-pointer flex items-start ${!useLetterboxing ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`}
+            onClick={() => toggleLetterboxing(false)}
+          >
+            <input
+              id="letterboxing-off"
+              name="export-style"
+              type="radio"
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 mt-1"
+              checked={!useLetterboxing}
+              onChange={() => toggleLetterboxing(false)}
+            />
+            <div className="ml-3">
+              <label htmlFor="letterboxing-off" className="font-medium text-gray-700">
+                Cropped (No Letterboxing)
+              </label>
+              <p className="text-sm text-gray-500">
+                Uses your focus point to crop the video to fit the aspect ratio perfectly without black bars.
+              </p>
+            </div>
+          </div>
         </div>
-        <p className="mt-1 text-sm text-gray-500">
-          When enabled, videos will be cropped around your focus point and then letterboxed to fit the selected aspect ratio.
-        </p>
       </div>
       
       {isExporting ? (

@@ -4,49 +4,11 @@ import { RootState } from '../store'
 import VideoExporter from '../components/video/VideoExporter'
 import DynamicVideoPreview from '../components/video/DynamicVideoPreview'
 import Button from '../components/common/Button'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 
 const Export = () => {
   const navigate = useNavigate()
-  const { url, currentTime, isPlaying } = useSelector((state: RootState) => state.video)
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const [isVideoReady, setIsVideoReady] = useState(false)
-  
-  // Set up video event listeners
-  useEffect(() => {
-    const videoElement = videoRef.current
-    if (!videoElement || !url) return
-    
-    const handleCanPlay = () => {
-      setIsVideoReady(true)
-      videoElement.currentTime = currentTime
-    }
-    
-    videoElement.addEventListener('canplay', handleCanPlay)
-    
-    // Clean up
-    return () => {
-      videoElement.removeEventListener('canplay', handleCanPlay)
-    }
-  }, [url])
-  
-  // Keep the video in sync with the current time
-  useEffect(() => {
-    if (videoRef.current && isVideoReady && Math.abs(videoRef.current.currentTime - currentTime) > 0.5) {
-      videoRef.current.currentTime = currentTime
-    }
-  }, [currentTime, isVideoReady])
-  
-  // Handle play/pause state
-  useEffect(() => {
-    if (videoRef.current && isVideoReady) {
-      if (isPlaying) {
-        videoRef.current.play().catch(err => console.error("Failed to play:", err))
-      } else {
-        videoRef.current.pause()
-      }
-    }
-  }, [isPlaying, isVideoReady])
+  const { url } = useSelector((state: RootState) => state.video)
   
   if (!url) {
     return (
@@ -77,25 +39,52 @@ const Export = () => {
               based on active focus points at the current timeline position.
             </p>
             
-            <div className="mb-6">
-              <div className="aspect-video bg-black relative mb-2 rounded overflow-hidden">
-                <video 
-                  ref={videoRef}
-                  src={url}
-                  className="w-full h-full"
-                  muted
-                  playsInline
-                  preload="auto"
-                />
+            <div className="mb-4">
+              <h3 className="text-sm font-medium mb-2">Letterboxed</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <div className="preview-container" style={{ width: '150px', aspectRatio: '9/16', overflow: 'hidden' }}>
+                    <DynamicVideoPreview ratio="9:16" width={150} height={267} letterboxEnabled={true} />
+                  </div>
+                  <p className="text-xs text-center mt-1">9:16 Portrait</p>
+                </div>
+                <div>
+                  <div className="preview-container" style={{ width: '150px', aspectRatio: '1/1', overflow: 'hidden' }}>
+                    <DynamicVideoPreview ratio="1:1" width={150} height={150} letterboxEnabled={true} />
+                  </div>
+                  <p className="text-xs text-center mt-1">1:1 Square</p>
+                </div>
+                <div>
+                  <div className="preview-container" style={{ width: '150px', aspectRatio: '4/5', overflow: 'hidden' }}>
+                    <DynamicVideoPreview ratio="4:5" width={150} height={188} letterboxEnabled={true} />
+                  </div>
+                  <p className="text-xs text-center mt-1">4:5 Instagram</p>
+                </div>
               </div>
-              <p className="text-xs text-gray-500 text-center">Original 16:9 Video</p>
             </div>
             
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              <DynamicVideoPreview ratio="9:16" width={180} />
-              <DynamicVideoPreview ratio="1:1" width={180} />
-              <DynamicVideoPreview ratio="4:5" width={180} />
-              <DynamicVideoPreview ratio="16:9" width={180} />
+            <div className="mb-8">
+              <h3 className="text-sm font-medium mb-2">Non-letterboxed</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <div className="preview-container" style={{ width: '150px', aspectRatio: '9/16', overflow: 'hidden' }}>
+                    <DynamicVideoPreview ratio="9:16" width={150} height={267} letterboxEnabled={false} />
+                  </div>
+                  <p className="text-xs text-center mt-1">9:16 Portrait</p>
+                </div>
+                <div>
+                  <div className="preview-container" style={{ width: '150px', aspectRatio: '1/1', overflow: 'hidden' }}>
+                    <DynamicVideoPreview ratio="1:1" width={150} height={150} letterboxEnabled={false} />
+                  </div>
+                  <p className="text-xs text-center mt-1">1:1 Square</p>
+                </div>
+                <div>
+                  <div className="preview-container" style={{ width: '150px', aspectRatio: '4/5', overflow: 'hidden' }}>
+                    <DynamicVideoPreview ratio="4:5" width={150} height={188} letterboxEnabled={false} />
+                  </div>
+                  <p className="text-xs text-center mt-1">4:5 Instagram</p>
+                </div>
+              </div>
             </div>
             
             <div className="mt-8">

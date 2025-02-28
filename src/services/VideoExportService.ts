@@ -3,12 +3,12 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Type definitions
 export interface ExportOptions {
-  ratio: string;
-  focusX: number;
-  focusY: number;
-  letterbox?: boolean;
-  quality?: 'high' | 'medium' | 'low';
-  frameRate?: number; // Optional target frame rate
+  ratio: string;     // e.g. "16:9", "1:1"
+  focusX: number;    // 0-1 horizontal focus point
+  focusY: number;    // 0-1 vertical focus point
+  quality?: 'low' | 'medium' | 'high';
+  frameRate?: number;
+  letterbox: boolean; // Whether to add letterboxing/pillarboxing
 }
 
 export interface ExportProgress {
@@ -113,7 +113,11 @@ class VideoExportService {
     options: ExportOptions,
     onProgress: ProgressCallback
   ): Promise<string> {
-    console.log('Export started with options:', options);
+    console.log('Export started with options:', JSON.stringify(options, null, 2));
+    
+    // Check letterbox option is passed correctly
+    console.log(`Letterbox option: ${options.letterbox}, type: ${typeof options.letterbox}`);
+    
     try {
       // Initialize FFmpeg if not already initialized
       if (!this.initialized || !this.ffmpeg) {
@@ -146,30 +150,43 @@ class VideoExportService {
       // Get video dimensions by running ffprobe - simpler approach
       let sourceWidth = 1280; // Default width
       let sourceHeight = 720; // Default height
+      let dimensionsFound = false;
       
       try {
+        console.log('Attaching one-time log handler to extract dimensions');
         // We'll examine FFmpeg logs to extract dimensions
-        let dimensionsFound = false;
         
-        const logHandler = (message: { message: string }) => {
+        const messageHandler = ({ message }) => {
+          // Remove the handler once we extract dimensions
+          if (dimensionsFound) {
+            this.ffmpeg.setLogger(({ message }) => {
+              console.log(`[fferr] ${message}`);
+            });
+            return;
+          }
+          
           // Look for dimensions in FFmpeg output
-          const match = message.message.match(/Stream #0:0.*Video.* ([0-9]+)x([0-9]+)/);
+          const match = message.match(/Stream #0:0.*Video.* ([0-9]+)x([0-9]+)/);
           if (match) {
             sourceWidth = parseInt(match[1], 10);
             sourceHeight = parseInt(match[2], 10);
             dimensionsFound = true;
-            console.log(`Detected video dimensions: ${sourceWidth}x${sourceHeight}`);
+            console.log(`Detected video dimensions from ffmpeg: ${sourceWidth}x${sourceHeight}`);
+            
+            // Reset the logger to just log errors
+            this.ffmpeg.setLogger(({ message }) => {
+              console.log(`[fferr] ${message}`);
+            });
           }
+          
+          console.log(`[fferr] ${message}`);
         };
         
-        // Register log handler
-        this.ffmpeg.setLogger(logHandler);
+        // Set the logger
+        this.ffmpeg.setLogger(messageHandler);
         
         // Run FFmpeg to get video info
         await this.runWithMutex(() => this.ffmpeg.run('-i', inputFilename));
-        
-        // Restore default logger
-        this.ffmpeg.setLogger(() => {});
         
         if (!dimensionsFound) {
           console.warn('Could not detect dimensions from logs, using defaults');
@@ -184,93 +201,54 @@ class VideoExportService {
       
       onProgress({ ratio: options.ratio, progress: 40, currentStep: 'Processing video...' });
       
-      // Parse the aspect ratio
-      const [targetWidth, targetHeight] = options.ratio.split(':').map(Number);
-      const targetRatio = targetWidth / targetHeight;
+      // Get output dimensions
+      const aspectRatioParts = options.ratio.split(':').map(n => parseInt(n, 10));
+      const aspectRatio = aspectRatioParts[0] / aspectRatioParts[1];
       
-      const sourceRatio = sourceWidth / sourceHeight;
-      
-      console.log(`Source dimensions: ${sourceWidth}x${sourceHeight}, ratio: ${sourceRatio}`);
-      console.log(`Target ratio: ${targetRatio}`);
-      
-      // Check if we can keep the original (ONLY when target ratio matches source ratio)
-      // We use a small epsilon for floating point comparison
-      const isOriginalFormat = Math.abs(sourceRatio - targetRatio) < 0.01;
-      
-      // Force letterboxing for 9:16 format
-      if (options.ratio === '9:16') {
-        console.log('9:16 format detected - FORCING letterboxing to ensure correct output');
-        options.letterbox = true;
-      }
-      
-      // Disable letterboxing for 16:9 format if source is also 16:9
-      if (isOriginalFormat && options.ratio === '16:9') {
-        console.log('16:9 source and target detected - DISABLING letterboxing');
-        options.letterbox = false;
-      }
-      
-      // Only apply this optimization for 16:9 source videos that are being exported to 16:9
-      if (isOriginalFormat && options.ratio === '16:9' && !options.letterbox) {
-        console.log('Source ratio matches target ratio, keeping original format (optimization)');
-        onProgress({ ratio: options.ratio, progress: 50, currentStep: 'Using original format...' });
-        
-        // Just copy the input to output (with possible quality adjustments)
-        const preset = options.quality === 'high' ? 'slow' : options.quality === 'low' ? 'veryfast' : 'medium';
-        const crf = options.quality === 'high' ? '18' : options.quality === 'low' ? '28' : '23';
-        
-        const command = [
-          '-i', inputFilename,
-          '-c:v', 'libx264',
-          '-preset', preset,
-          '-crf', crf,
-          '-c:a', 'aac',
-          '-b:a', '128k',
-          ...(options.frameRate ? ['-r', options.frameRate.toString()] : []),
-          '-movflags', '+faststart',
-          '-y',
-          outputFilename
-        ];
-        
-        console.log('FFmpeg command (original format):', command.join(' '));
-        await this.runWithMutex(() => this.ffmpeg.run(...command));
-        
-        onProgress({ ratio: options.ratio, progress: 90, currentStep: 'Finalizing...' });
-        
-        // Read the processed file
-        const data = this.ffmpeg.FS('readFile', outputFilename);
-        
-        // Clean up files
-        this.ffmpeg.FS('unlink', inputFilename);
-        this.ffmpeg.FS('unlink', outputFilename);
-        
-        onProgress({ ratio: options.ratio, progress: 100, currentStep: 'Done' });
-        
-        // Create a blob URL for the processed video
-        return URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
-      }
-      
-      // Calculate output dimensions based on target ratio
+      // Hard-coded dimensions for common formats
       let outputWidth, outputHeight;
-      
-      if (targetRatio < 1) {
-        // Portrait (e.g., 9:16)
-        outputHeight = 1280;
-        outputWidth = Math.round(outputHeight * targetRatio);
-      } else if (targetRatio > 1) {
-        // Landscape (e.g., 16:9)
+      if (options.ratio === '16:9') {
         outputWidth = 1280;
-        outputHeight = Math.round(outputWidth / targetRatio);
+        outputHeight = 720;
+      } else if (options.ratio === '9:16') {
+        outputWidth = 720;
+        outputHeight = 1280;
+      } else if (options.ratio === '1:1') {
+        outputWidth = 1080;
+        outputHeight = 1080;
+      } else if (options.ratio === '4:5') {
+        outputWidth = 864;
+        outputHeight = 1080;
       } else {
-        // Square (1:1)
-        outputWidth = outputHeight = 1080;
+        // Default to 720p equivalent for other ratios
+        if (aspectRatio > 1) {
+          outputWidth = 1280;
+          outputHeight = Math.round(outputWidth / aspectRatio);
+        } else {
+          outputHeight = 1280;
+          outputWidth = Math.round(outputHeight * aspectRatio);
+        }
       }
       
-      console.log(`Output dimensions: ${outputWidth}x${outputHeight}`);
+      console.log(`Output dimensions: ${outputWidth}x${outputHeight}, aspect ratio: ${aspectRatio}`);
       
       // Determine crop dimensions
       let cropWidth, cropHeight, cropX, cropY;
       
-      if (options.letterbox) {
+      // Log export mode choice with clear distinction
+      console.log(`-------------------------------------------`);
+      console.log(`EXPORT MODE: ${options.letterbox ? 'LETTERBOXED' : 'NON-LETTERBOXED'}`);
+      console.log(`options.letterbox value: ${options.letterbox}, type: ${typeof options.letterbox}`);
+      console.log(`String comparison: "${options.letterbox}" === "true": ${options.letterbox === "true"}`);
+      console.log(`Boolean conversion: Boolean(options.letterbox): ${Boolean(options.letterbox)}`);
+      console.log(`-------------------------------------------`);
+      
+      // Use explicit boolean conversion for the letterbox flag
+      const shouldLetterbox = Boolean(options.letterbox === true);
+      
+      console.log(`Final letterbox decision: ${shouldLetterbox ? 'WILL USE LETTERBOXING' : 'NO LETTERBOXING'}`);
+      
+      if (shouldLetterbox) {
         // For letterboxing, we'll:
         // 1. First crop to a square around the focus point
         // 2. Then letterbox that square to the target format
@@ -291,22 +269,22 @@ class VideoExportService {
         const cropFilter = `crop=${squareSize}:${squareSize}:${cropX}:${cropY}`;
         
         // Now add letterboxing based on target ratio
-        if (targetRatio > 1) {
+        if (aspectRatio > 1) {
           // Target is wider than square (e.g., 16:9) - add horizontal letterboxing
           const scaledHeight = outputHeight;
           const scaledWidth = scaledHeight; // Square
           filterChain = `${cropFilter},scale=${scaledWidth}:${scaledHeight},setsar=1,pad=${outputWidth}:${outputHeight}:(((${outputWidth}-${scaledWidth})/2)):0:black`;
-          console.log('Using wide target letterboxing. Target ratio:', targetRatio, 'Filter:', filterChain);
-        } else if (targetRatio < 1) {
+          console.log('Using wide target letterboxing. Target ratio:', aspectRatio, 'Filter:', filterChain);
+        } else if (aspectRatio < 1) {
           // Target is taller than square (e.g., 9:16) - add vertical letterboxing
           const scaledWidth = outputWidth;
           const scaledHeight = scaledWidth; // Square
           filterChain = `${cropFilter},scale=${scaledWidth}:${scaledHeight},setsar=1,pad=${outputWidth}:${outputHeight}:0:(((${outputHeight}-${scaledHeight})/2)):black`;
-          console.log('Using tall target letterboxing. Target ratio:', targetRatio, 'Filter:', filterChain);
+          console.log('Using tall target letterboxing. Target ratio:', aspectRatio, 'Filter:', filterChain);
         } else {
           // Target is also square, just resize
           filterChain = `${cropFilter},scale=${outputWidth}:${outputHeight},setsar=1`;
-          console.log('Using square target. Target ratio:', targetRatio, 'Filter:', filterChain);
+          console.log('Using square target. Target ratio:', aspectRatio, 'Filter:', filterChain);
         }
         
         console.log('Using focus-centered letterbox filter chain:', filterChain);
@@ -342,6 +320,13 @@ class VideoExportService {
         }
       } else {
         // For cropping without letterboxing
+        console.log('Non-letterboxed export with focus point:', options.focusX, options.focusY);
+        
+        // Calculate source aspect ratio
+        const sourceRatio = sourceWidth / sourceHeight;
+        // Calculate target aspect ratio from options
+        const targetRatio = aspectRatio;
+        
         if (sourceRatio > targetRatio) {
           // Source is wider than target - need to crop width
           cropHeight = sourceHeight;
@@ -375,7 +360,8 @@ class VideoExportService {
         const scaleFilter = `scale=${outputWidth}:${outputHeight}`;
         const filterChain = `${cropFilter},${scaleFilter},setsar=1`;
         
-        console.log('Using crop and scale filter chain:', filterChain);
+        console.log('Using crop and scale filter chain for NON-LETTERBOXED output:', filterChain);
+        console.log(`Final dimensions for NON-LETTERBOXED output: ${outputWidth}x${outputHeight}`);
         
         // FFmpeg command with crop and scaling
         const preset = options.quality === 'high' ? 'slow' : options.quality === 'low' ? 'veryfast' : 'medium';
@@ -452,6 +438,11 @@ class VideoExportService {
       console.error('Error getting video dimensions:', error);
       return null;
     }
+  }
+
+  private getRatioFromString(ratio: string): number {
+    const [width, height] = ratio.split(':').map(Number);
+    return width / height;
   }
 
   /**
