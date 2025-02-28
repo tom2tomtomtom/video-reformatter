@@ -6,6 +6,7 @@ import VideoTimeline from '../components/video/VideoTimeline'
 import FocusSelector from '../components/editor/FocusSelector'
 import AspectRatioPreview from '../components/video/AspectRatioPreview'
 import Button from '../components/common/Button'
+import TestButtons from '../components/editor/TestButtons'
 
 const Editor = () => {
   const navigate = useNavigate()
@@ -28,7 +29,10 @@ const Editor = () => {
       <div className="max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold mb-6">Video Editor</h1>
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Emergency Test Buttons - For debugging only */}
+        <TestButtons />
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
           <div className="lg:col-span-2">
             <VideoPlayer />
             <VideoTimeline />
