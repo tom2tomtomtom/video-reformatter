@@ -14,11 +14,24 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({ ratio, width 
   const { points } = useSelector((state: RootState) => state.focusPoints)
   const [activeFocusPoint, setActiveFocusPoint] = useState<FocusPoint | null>(null)
   const [isVideoReady, setIsVideoReady] = useState(false)
+  const [isInitialRender, setIsInitialRender] = useState(true)
   
   // Calculate height based on aspect ratio
   const [ratioWidth, ratioHeight] = ratio.split(':').map(Number)
   const aspectRatio = ratioWidth / ratioHeight
   const height = width / aspectRatio
+  
+  // For debugging - log when props or state changes
+  useEffect(() => {
+    console.log(`[${ratio}] Preview - Current focus points: `, points.length);
+    
+    // On initial render, log the video URL
+    if (isInitialRender) {
+      console.log(`[${ratio}] Preview - Video URL: `, url);
+      console.log(`[${ratio}] Preview - Current time: `, currentTime);
+      setIsInitialRender(false);
+    }
+  }, [ratio, points.length, url, isInitialRender, currentTime]);
   
   // Update active focus point when current time changes
   useEffect(() => {
@@ -26,78 +39,103 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({ ratio, width 
       point => currentTime >= point.timeStart && currentTime <= point.timeEnd
     ) || null
     
-    setActiveFocusPoint(activePoint)
-  }, [currentTime, points])
-  
-  // Set up video event listeners
-  useEffect(() => {
-    const videoElement = videoRef.current
-    if (!videoElement) return
-    
-    const handleCanPlay = () => {
-      setIsVideoReady(true)
-      videoElement.currentTime = currentTime
+    if (activePoint) {
+      console.log(`[${ratio}] Active focus point at ${currentTime}s:`, activePoint.description);
     }
     
-    videoElement.addEventListener('canplay', handleCanPlay)
+    setActiveFocusPoint(activePoint)
+  }, [currentTime, points, ratio])
+  
+  // Set up video element and event listeners
+  useEffect(() => {
+    if (!videoRef.current || !url) return;
+    
+    const videoElement = videoRef.current;
+    
+    const handleCanPlay = () => {
+      console.log(`[${ratio}] Video can play!`);
+      setIsVideoReady(true);
+      videoElement.currentTime = currentTime;
+    };
+    
+    const handleError = (e: Event) => {
+      console.error(`[${ratio}] Video error:`, e);
+    };
+    
+    // Reset state when URL changes
+    setIsVideoReady(false);
+    
+    // Add event listeners
+    videoElement.addEventListener('canplay', handleCanPlay);
+    videoElement.addEventListener('error', handleError);
+    
+    // Load the video
+    videoElement.src = url;
+    videoElement.load();
     
     // Clean up
     return () => {
-      videoElement.removeEventListener('canplay', handleCanPlay)
-    }
-  }, [url])
+      videoElement.removeEventListener('canplay', handleCanPlay);
+      videoElement.removeEventListener('error', handleError);
+    };
+  }, [url, ratio]);
   
   // Sync video time with player
   useEffect(() => {
     if (videoRef.current && isVideoReady && Math.abs(videoRef.current.currentTime - currentTime) > 0.5) {
-      videoRef.current.currentTime = currentTime
+      console.log(`[${ratio}] Updating time to ${currentTime}s`);
+      videoRef.current.currentTime = currentTime;
     }
-  }, [currentTime, isVideoReady])
+  }, [currentTime, isVideoReady, ratio]);
   
   // Handle play/pause state
   useEffect(() => {
     if (videoRef.current && isVideoReady) {
       if (isPlaying) {
-        videoRef.current.play().catch(err => console.error("Failed to play:", err))
+        videoRef.current.play().catch(err => console.error(`[${ratio}] Failed to play:`, err));
       } else {
-        videoRef.current.pause()
+        videoRef.current.pause();
       }
     }
-  }, [isPlaying, isVideoReady])
+  }, [isPlaying, isVideoReady, ratio]);
   
   // Calculate crop styles based on focus point
   const getCropStyles = () => {
-    if (!activeFocusPoint) return {}
+    if (!activeFocusPoint) {
+      return { transform: 'scale(1)', transformOrigin: '50% 50%' };
+    }
     
     // For 16:9 source to other aspect ratios
-    const sourceRatio = 16 / 9
-    const targetRatio = ratioWidth / ratioHeight
+    const sourceRatio = 16 / 9;
+    const targetRatio = ratioWidth / ratioHeight;
     
     // Calculate scaling and positioning
-    let scale, offsetX, offsetY
+    let scale, offsetX, offsetY;
     
     if (targetRatio < sourceRatio) {
       // Target is taller than source (e.g., 9:16 vertical video)
-      scale = sourceRatio / targetRatio
-      offsetX = Math.max(0, Math.min(100, (activeFocusPoint.x * scale - (scale - 1) * 50)))
-      offsetY = activeFocusPoint.y
+      scale = sourceRatio / targetRatio;
+      offsetX = Math.max(0, Math.min(100, (activeFocusPoint.x * scale - (scale - 1) * 50)));
+      offsetY = activeFocusPoint.y;
     } else if (targetRatio > sourceRatio) {
       // Target is wider than source
-      scale = targetRatio / sourceRatio
-      offsetX = activeFocusPoint.x
-      offsetY = Math.max(0, Math.min(100, (activeFocusPoint.y * scale - (scale - 1) * 50)))
+      scale = targetRatio / sourceRatio;
+      offsetX = activeFocusPoint.x;
+      offsetY = Math.max(0, Math.min(100, (activeFocusPoint.y * scale - (scale - 1) * 50)));
     } else {
       // Same aspect ratio, no scaling needed
-      scale = 1
-      offsetX = activeFocusPoint.x
-      offsetY = activeFocusPoint.y
+      scale = 1;
+      offsetX = activeFocusPoint.x;
+      offsetY = activeFocusPoint.y;
     }
+    
+    console.log(`[${ratio}] Applying transform: scale(${scale}), origin: ${offsetX}% ${offsetY}%`);
     
     return {
       transform: `scale(${scale})`,
       transformOrigin: `${offsetX}% ${offsetY}%`
-    }
-  }
+    };
+  };
   
   if (!url) {
     return (
@@ -107,7 +145,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({ ratio, width 
       >
         <p className="text-center text-sm text-gray-500">No video loaded</p>
       </div>
-    )
+    );
   }
   
   return (
@@ -134,7 +172,6 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({ ratio, width 
           <div className="relative w-full h-full overflow-hidden">
             <video
               ref={videoRef}
-              src={url}
               style={{
                 width: '100%',
                 height: '100%',
@@ -144,29 +181,24 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({ ratio, width 
               className="absolute inset-0"
               muted
               playsInline
-              poster=""
+              preload="auto"
             />
           </div>
         )}
         
-        {/* Always render the video but it might be hidden until ready */}
-        <video
-          ref={videoRef}
-          src={url}
-          className={`absolute inset-0 ${isVideoReady ? 'block' : 'hidden'}`}
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            ...getCropStyles()
-          }}
-          muted
-          playsInline
-          preload="auto"
-        />
+        {/* Keep the video element present but hidden when not ready */}
+        {!isVideoReady && (
+          <video
+            ref={videoRef}
+            className="hidden"
+            muted
+            playsInline
+            preload="auto"
+          />
+        )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default DynamicVideoPreview
+export default DynamicVideoPreview;
