@@ -26,12 +26,6 @@ const Header = () => {
               Editor
             </Link>
             <Link 
-              to="/projects" 
-              className={`hover:text-blue-200 ${isActive('/projects') ? 'font-semibold border-b-2 border-white' : ''}`}
-            >
-              Projects
-            </Link>
-            <Link 
               to="/export" 
               className={`hover:text-blue-200 ${isActive('/export') ? 'font-semibold border-b-2 border-white' : ''}`}
             >

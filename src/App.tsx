@@ -1,7 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 import Editor from './pages/Editor'
-import Projects from './pages/Projects'
 import Export from './pages/Export'
 import Header from './components/layout/Header'
 import Footer from './components/layout/Footer'
@@ -14,7 +13,6 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/editor" element={<Editor />} />
-          <Route path="/projects" element={<Projects />} />
           <Route path="/export" element={<Export />} />
         </Routes>
       </main>
