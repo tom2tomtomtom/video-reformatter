@@ -8,7 +8,7 @@ import {
 } from '../../store/slices/focusPointsSlice';
 import { updateCurrentTime } from '../../store/slices/videoSlice';
 import Button from "../common/Button";
-import SubjectDetectionService from "../../services/SubjectDetectionService";
+import subjectDetectionService from "../../services/SubjectDetectionService";
 import VideoScannerService from "../../services/VideoScannerService";
 import {
   startScan,
@@ -96,8 +96,8 @@ const FocusSelector: React.FC = () => {
       setIsDetecting(true);
       setDetectError(null);
       
-      const detectionService = new SubjectDetectionService();
-      await detectionService.initialize();
+      // Load model if needed
+      await subjectDetectionService.loadModel();
       
       // Capture the current frame to canvas
       const canvas = canvasRef.current;
@@ -114,10 +114,15 @@ const FocusSelector: React.FC = () => {
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
       
       // Detect objects in canvas
-      const detectedObjects = await detectionService.detectObjectsInCanvas(canvas);
+      const detectionResult = await subjectDetectionService.detectObjects(canvas);
+      
+      if (detectionResult.error) {
+        setDetectError(`Detection error: ${detectionResult.error}`);
+        return;
+      }
       
       // Add detected objects as focus points
-      detectedObjects.forEach(obj => {
+      detectionResult.objects.forEach(obj => {
         const { bbox, class: className, score } = obj;
         
         // Only add objects with score higher than 0.5
@@ -137,9 +142,13 @@ const FocusSelector: React.FC = () => {
           }));
         }
       });
+      
+      if (detectionResult.objects.length === 0) {
+        setDetectError('No objects detected in this frame.');
+      }
     } catch (error) {
       console.error('Error detecting subjects:', error);
-      setDetectError('Error detecting subjects');
+      setDetectError('Error detecting subjects: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setIsDetecting(false);
     }
@@ -231,29 +240,29 @@ const FocusSelector: React.FC = () => {
       {/* Subject detection controls */}
       <div className="mb-4">
         <div className="flex gap-2 mb-2">
-          <Button
+          <button
             onClick={detectSubjects}
             disabled={isDetecting || isScanning}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md"
+            className={`px-4 py-2 rounded-md ${isDetecting || isScanning ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
           >
             {isDetecting ? 'Detecting...' : 'Detect Subjects'}
-          </Button>
+          </button>
           
           {isScanning ? (
-            <Button
+            <button
               onClick={stopVideoScan}
-              className="px-4 py-2 bg-red-600 text-white rounded-md"
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md"
             >
               Stop Scanning
-            </Button>
+            </button>
           ) : (
-            <Button
+            <button
               onClick={startVideoScan}
               disabled={isDetecting || isReviewMode}
-              className="px-4 py-2 bg-green-600 text-white rounded-md"
+              className={`px-4 py-2 rounded-md ${isDetecting || isReviewMode ? 'bg-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} text-white`}
             >
               Scan Entire Video
-            </Button>
+            </button>
           )}
         </div>
         

@@ -24,6 +24,13 @@ class SubjectDetectionService {
   private modelLoaded: boolean = false;
 
   /**
+   * Initialize the detection service
+   */
+  async initialize(): Promise<void> {
+    return this.loadModel();
+  }
+
+  /**
    * Load the model
    */
   async loadModel(): Promise<void> {
@@ -63,6 +70,8 @@ class SubjectDetectionService {
    * Detect objects in the provided image
    */
   async detectObjects(image: HTMLImageElement | HTMLCanvasElement): Promise<DetectionResult> {
+    console.log('Starting object detection...');
+    
     if (!this.modelLoaded) {
       try {
         await this.loadModel();
@@ -87,12 +96,14 @@ class SubjectDetectionService {
 
     const imageWidth = image.width;
     const imageHeight = image.height;
+    console.log(`Detecting objects in image (${imageWidth}x${imageHeight})`);
     
     let objects: DetectedObject[] = [];
 
     try {
       // Run inference - coco-ssd handles tensor conversion internally
       const predictions = await this.model.detect(image);
+      console.log('Detection complete, found', predictions.length, 'objects');
       
       // Convert to our DetectedObject format
       objects = predictions.map((pred: any, i: number) => {
@@ -119,6 +130,14 @@ class SubjectDetectionService {
       imageWidth,
       imageHeight
     };
+  }
+
+  /**
+   * Method for backward compatibility
+   */
+  async detectObjectsInCanvas(canvas: HTMLCanvasElement): Promise<DetectedObject[]> {
+    const result = await this.detectObjects(canvas);
+    return result.objects;
   }
 
   /**
@@ -159,4 +178,6 @@ class SubjectDetectionService {
   }
 }
 
-export default new SubjectDetectionService();
+// Export a singleton instance
+const service = new SubjectDetectionService();
+export default service;
