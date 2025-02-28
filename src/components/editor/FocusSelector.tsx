@@ -37,6 +37,13 @@ const FocusSelector: React.FC = () => {
     isReviewMode, 
     scanOptions 
   } = useSelector((state: RootState) => state.videoScan);
+
+  // Added reset function to unstick any problematic states
+  const resetStates = () => {
+    setIsDetecting(false);
+    setDetectError(null);
+    dispatch(stopScan());
+  };
   
   // Get a reference to the video element
   useEffect(() => {
@@ -52,6 +59,12 @@ const FocusSelector: React.FC = () => {
       if (videoElements.length > 0) {
         videoRef.current = videoElements[0];
         console.log('Video element found:', videoRef.current);
+        
+        // Reset review mode if it's stuck
+        if (isReviewMode && detectedSubjects.length === 0) {
+          console.log('Review mode was active but no subjects detected - resetting state');
+          dispatch(exitReviewMode());
+        }
       } else {
         console.warn('No video element found on the page');
         videoRef.current = null;
@@ -60,14 +73,33 @@ const FocusSelector: React.FC = () => {
     
     // Try immediately and then retry after a delay to ensure the player has mounted
     findVideoElement();
+    const timerId = setTimeout(findVideoElement, 1000);
     
-    const timeoutId = setTimeout(() => {
-      findVideoElement();
-    }, 1000);
+    return () => {
+      clearTimeout(timerId);
+    };
+  }, [url, dispatch, isReviewMode, detectedSubjects.length]);
+
+  // Reset any stuck states when component mounts
+  useEffect(() => {
+    // If we're in review mode with no subjects, reset the state
+    if (isReviewMode && detectedSubjects.length === 0) {
+      dispatch(exitReviewMode());
+    }
     
-    return () => clearTimeout(timeoutId);
-  }, [url]); // Re-run when URL changes (new video loaded)
-  
+    // If scanning is stuck, reset it
+    if (isScanning && progress.percentComplete === 0 && progress.elapsedTime > 10) {
+      dispatch(stopScan());
+    }
+    
+    // Clean up when component unmounts
+    return () => {
+      if (isScanning) {
+        dispatch(stopScan());
+      }
+    };
+  }, [dispatch, isReviewMode, detectedSubjects.length, isScanning, progress]);
+
   // Function to detect subjects in the current frame
   const detectSubjects = async () => {
     // Check if the video is loaded
@@ -156,6 +188,9 @@ const FocusSelector: React.FC = () => {
   
   // Function to start scanning the entire video
   const startVideoScan = async () => {
+    // Reset any errors
+    setDetectError(null);
+    
     // Check if the video is loaded
     if (!url) {
       setDetectError('No video loaded. Please upload a video first.');
@@ -258,7 +293,7 @@ const FocusSelector: React.FC = () => {
           ) : (
             <Button
               onClick={startVideoScan}
-              disabled={isDetecting || isReviewMode}
+              disabled={isDetecting} 
               className="px-4 py-2 bg-green-600 text-white rounded-md relative z-10"
             >
               Scan Entire Video
@@ -267,16 +302,24 @@ const FocusSelector: React.FC = () => {
         </div>
         
         {detectError && (
-          <div className="text-red-500 text-sm mb-2 p-2 bg-red-50 border border-red-200 rounded">
+          <div className="text-red-500 text-sm mb-2">
             {detectError}
           </div>
         )}
+        
+        {isReviewMode && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">
+              Available Focus Points: {detectedSubjects.length || 0}
+            </label>
+          </div>
+        )}
+        
+        {/* Scanning configuration */}
+        {!isScanning && !isReviewMode && (
+          <ScanConfigPanel />
+        )}
       </div>
-      
-      {/* Scanning configuration */}
-      {!isScanning && !isReviewMode && (
-        <ScanConfigPanel />
-      )}
       
       {/* Scan progress indicator */}
       {isScanning && (
@@ -293,10 +336,12 @@ const FocusSelector: React.FC = () => {
       
       {/* Results review panel */}
       {isReviewMode && (
-        <ScanReviewPanel
-          videoElement={videoRef.current}
-          onFinalize={handleScanFinalized}
-        />
+        <div className="mb-4">
+          <ScanReviewPanel
+            videoElement={videoRef.current}
+            onFinalize={handleScanFinalized}
+          />
+        </div>
       )}
       
       {/* Instructions */}

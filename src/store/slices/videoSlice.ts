@@ -6,6 +6,8 @@ interface VideoState {
   currentTime: number
   isPlaying: boolean
   volume: number
+  originalFileName: string | null 
+  videoId: string | null 
 }
 
 const initialState: VideoState = {
@@ -14,6 +16,8 @@ const initialState: VideoState = {
   currentTime: 0,
   isPlaying: false,
   volume: 1,
+  originalFileName: null,
+  videoId: null,
 }
 
 export const videoSlice = createSlice({
@@ -22,6 +26,11 @@ export const videoSlice = createSlice({
   reducers: {
     setVideoUrl: (state, action: PayloadAction<string>) => {
       state.url = action.payload
+    },
+    setVideoMetadata: (state, action: PayloadAction<{ url: string, fileName: string, videoId: string }>) => {
+      state.url = action.payload.url
+      state.originalFileName = action.payload.fileName
+      state.videoId = action.payload.videoId
     },
     setDuration: (state, action: PayloadAction<number>) => {
       state.duration = action.payload
@@ -43,6 +52,7 @@ export const videoSlice = createSlice({
 
 export const {
   setVideoUrl,
+  setVideoMetadata,
   setDuration,
   setCurrentTime,
   setIsPlaying,

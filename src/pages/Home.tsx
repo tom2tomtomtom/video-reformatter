@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { setVideoUrl } from '../store/slices/videoSlice'
+import { setVideoMetadata } from '../store/slices/videoSlice'
 import Button from '../components/common/Button'
 import FileUploader from '../components/common/FileUploader'
+import { storeVideo } from '../utils/videoStorage'
 
 const Home = () => {
   const dispatch = useDispatch()
@@ -11,6 +12,7 @@ const Home = () => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showFallbackButton, setShowFallbackButton] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   
   // After 3 seconds, show the fallback button in case the main button has issues
   useEffect(() => {
@@ -21,29 +23,46 @@ const Home = () => {
     return () => clearTimeout(timer)
   }, [])
   
-  const handleFileSelect = useCallback((file: File) => {
+  const handleFileSelect = useCallback(async (file: File) => {
     // Reset any previous errors
     setUploadError(null)
+    setIsUploading(true)
     
     console.log("File selected:", file.name, file.type) // Debug log
     
     // Check if the file is a video
     if (!file.type.startsWith('video/')) {
       setUploadError('Please select a valid video file.')
+      setIsUploading(false)
       return
     }
     
     try {
-      // For demonstration, create a local URL for the video file
-      const url = URL.createObjectURL(file)
-      console.log("File URL created:", url) // Debug log
-      dispatch(setVideoUrl(url))
+      // Store the video file in IndexedDB for persistence
+      console.log("About to store video in IndexedDB...")
+      const { videoId, url } = await storeVideo(file)
+      console.log("Video stored successfully with ID:", videoId)
+      console.log("Generated URL:", url)
+      
+      // Dispatch to Redux with full metadata
+      console.log("Dispatching to Redux...")
+      dispatch(setVideoMetadata({
+        url,
+        fileName: file.name,
+        videoId
+      }))
+      console.log("Redux dispatch complete")
       
       // Navigate to editor
-      navigate('/editor')
+      console.log("Preparing to navigate to editor...")
+      window.setTimeout(() => {
+        console.log("Now navigating to editor...")
+        navigate('/editor')
+      }, 500) // Add a slight delay to ensure Redux state is updated
     } catch (error) {
       console.error("Error handling file:", error)
       setUploadError('Failed to process the video file. Please try again.')
+      setIsUploading(false)
     }
   }, [dispatch, navigate])
   
@@ -68,7 +87,7 @@ const Home = () => {
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold mb-4">Video Reformatter</h1>
+          <h1 className="text-4xl font-bold mb-4">Redbaez Reformatter</h1>
           <p className="text-xl text-gray-600 mb-8">
             Transform 16:9 TV drama footage into perfect formats for Instagram, Facebook, TikTok and more
           </p>
@@ -109,23 +128,12 @@ const Home = () => {
               </Button>
             </div>
             
-            {/* Plain HTML fallback button as last resort */}
-            {showFallbackButton && (
-              <div className="mt-4 p-3 bg-yellow-50 rounded text-center">
-                <p className="text-sm text-yellow-700 mb-2">
-                  If the button above doesn't work, please try this alternative:
-                </p>
-                <button 
-                  className="bg-green-600 text-white px-6 py-3 rounded font-medium hover:bg-green-700"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  Alternative Upload Button
-                </button>
-              </div>
-            )}
-            
             {uploadError && (
               <p className="text-red-500 mt-2">{uploadError}</p>
+            )}
+            
+            {isUploading && (
+              <p className="text-gray-500 mt-2">Uploading...</p>
             )}
           </div>
         </div>

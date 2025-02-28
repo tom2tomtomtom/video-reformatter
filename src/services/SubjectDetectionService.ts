@@ -35,10 +35,12 @@ class SubjectDetectionService {
    */
   async loadModel(): Promise<void> {
     if (this.modelLoaded) {
+      console.log('Model already loaded, reusing existing model');
       return; // Model already loaded
     }
 
     if (this.loading) {
+      console.log('Model is currently loading, waiting...');
       // Wait for current loading process to complete
       while (this.loading) {
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -49,17 +51,48 @@ class SubjectDetectionService {
     try {
       this.loading = true;
       console.log('Loading COCO-SSD model...');
+      
+      // Check if TensorFlow is available
+      if (!tf) {
+        console.error('TensorFlow is not defined! Check if @tensorflow/tfjs is installed correctly');
+        throw new Error('TensorFlow is not available');
+      }
+      
+      console.log('TensorFlow version:', tf.version);
+      console.log('TensorFlow backend:', tf.getBackend());
+      
+      // Ensure WebGL backend is ready
+      if (tf.getBackend() !== 'webgl') {
+        console.log('Setting WebGL backend...');
+        try {
+          await tf.setBackend('webgl');
+          console.log('Successfully set WebGL backend');
+        } catch (err) {
+          console.error('Error setting WebGL backend:', err);
+          console.log('Falling back to CPU backend');
+        }
+      }
 
       // Dynamically import the coco-ssd model
-      const cocoSsd = await import('@tensorflow-models/coco-ssd');
-      
-      // Load the model - this is optimized for browser use
-      this.model = await cocoSsd.load();
+      try {
+        console.log('Dynamically importing coco-ssd model...');
+        const cocoSsd = await import('@tensorflow-models/coco-ssd');
+        console.log('coco-ssd import successful:', !!cocoSsd);
+        
+        // Load the model - this is optimized for browser use
+        console.log('Loading model...');
+        this.model = await cocoSsd.load();
+        console.log('Model loading successful:', !!this.model);
 
-      this.modelLoaded = true;
-      console.log('COCO-SSD model loaded successfully');
+        this.modelLoaded = true;
+        console.log('COCO-SSD model loaded successfully');
+      } catch (importError) {
+        console.error('Error importing coco-ssd model:', importError);
+        throw new Error(`Failed to import coco-ssd: ${importError.message}`);
+      }
     } catch (error) {
       console.error('Error loading COCO-SSD model:', error);
+      this.modelLoaded = false;
       throw error;
     } finally {
       this.loading = false;

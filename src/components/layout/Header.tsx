@@ -11,7 +11,7 @@ const Header = () => {
     <header className="bg-blue-600 text-white shadow-md">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
-          <Link to="/" className="text-2xl font-bold">Video Reformatter</Link>
+          <Link to="/" className="text-2xl font-bold">Redbaez Reformatter</Link>
           <nav className="flex space-x-6">
             <Link 
               to="/" 

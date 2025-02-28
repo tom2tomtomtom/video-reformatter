@@ -1,3 +1,4 @@
+import React, { useEffect } from 'react'
 import { useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { RootState } from '../store'
@@ -9,13 +10,28 @@ import Button from '../components/common/Button'
 
 const Editor = () => {
   const navigate = useNavigate()
-  const { url } = useSelector((state: RootState) => state.video)
+  const { url, videoId } = useSelector((state: RootState) => state.video)
+  
+  // Redirect to home if no video URL is available
+  useEffect(() => {
+    if (!url) {
+      // Redirect to home if no video is loaded
+      const redirectTimer = setTimeout(() => {
+        navigate('/')
+      }, 500)
+      
+      return () => clearTimeout(redirectTimer)
+    }
+  }, [url, navigate])
   
   if (!url) {
     return (
       <div className="container mx-auto px-4 py-12 text-center">
         <h1 className="text-2xl font-bold mb-6">No Video Loaded</h1>
         <p className="text-gray-600 mb-6">Please upload a video to begin editing.</p>
+        <div className="animate-pulse">
+          <p className="text-sm text-gray-500 mb-4">Redirecting to upload page...</p>
+        </div>
         <Button onClick={() => navigate('/')} variant="primary">
           Go to Upload
         </Button>

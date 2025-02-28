@@ -1,6 +1,6 @@
 import { useSelector } from 'react-redux'
 import { RootState } from '../../store'
-import { FocusPoint } from '../../store/slices/focusPointsSlice'
+import DynamicVideoPreview from './DynamicVideoPreview'
 
 interface AspectRatioPreviewProps {
   ratio: string
@@ -8,83 +8,71 @@ interface AspectRatioPreviewProps {
 }
 
 const AspectRatioPreview: React.FC<AspectRatioPreviewProps> = ({ ratio, width }) => {
-  const { url } = useSelector((state: RootState) => state.video)
   const { selectedPointId, points } = useSelector((state: RootState) => state.focusPoints)
+  const { url } = useSelector((state: RootState) => state.video)
   
   const selectedPoint = points.find(p => p.id === selectedPointId) || null
+  const hasScannedData = points.length > 0
   
-  if (!url) {
-    return (
-      <div 
-        className="bg-gray-200 rounded flex items-center justify-center"
-        style={{ width: `${width}px`, aspectRatio: ratio.replace(':', '/') }}
-      >
-        <p className="text-center text-sm text-gray-500">No video loaded</p>
-      </div>
-    )
-  }
-  
-  // Extract ratio values
+  // Calculate height based on ratio
   const [ratioWidth, ratioHeight] = ratio.split(':').map(Number)
-  
-  // Calculate container dimensions
   const aspectRatio = ratioWidth / ratioHeight
-  const height = width / aspectRatio
-  
-  // Calculate crop values based on selected focus point
-  const getCropStyles = () => {
-    if (!selectedPoint) return {}
-    
-    // For 16:9 source to other aspect ratios
-    const sourceRatio = 16 / 9
-    const targetRatio = ratioWidth / ratioHeight
-    
-    // Calculate scaling and positioning
-    let scale, offsetX, offsetY
-    
-    if (targetRatio < sourceRatio) {
-      // Target is taller than source (e.g., 9:16 vertical video)
-      scale = sourceRatio / targetRatio
-      offsetX = selectedPoint.x * scale - (scale - 1) * 50 // Center by default
-      offsetY = selectedPoint.y
-    } else {
-      // Target is wider than source (e.g., 1:1 square)
-      scale = targetRatio / sourceRatio
-      offsetX = selectedPoint.x
-      offsetY = selectedPoint.y * scale - (scale - 1) * 50 // Center by default
-    }
-    
-    return {
-      transform: `scale(${scale})`,
-      transformOrigin: `${offsetX}% ${offsetY}%`
-    }
-  }
+  const height = Math.round(width / aspectRatio)
   
   return (
-    <div className="relative overflow-hidden rounded border border-gray-300">
-      <div className="absolute top-0 left-0 text-xs bg-black bg-opacity-50 text-white px-2 py-1 z-10">
-        {ratio}
+    <div className="aspect-ratio-preview mb-6">
+      <div className="mb-1">
+        <h3 className="text-lg font-medium">{ratio} ratio</h3>
       </div>
       
-      <div 
-        className="overflow-hidden"
-        style={{ width: `${width}px`, height: `${height}px` }}
-      >
-        {/* Instead of trying to use the video URL as an image source, we'll show a placeholder */}
-        <div 
-          className="bg-gray-800 w-full h-full flex items-center justify-center"
-          style={getCropStyles()}
-        >
-          <div className="text-center text-white text-xs">
-            <p>{ratio} Preview</p>
-            {selectedPoint && (
-              <p className="text-gray-300 mt-1">
-                Focus: {selectedPoint.description.substring(0, 20)}
-                {selectedPoint.description.length > 20 ? '...' : ''}
+      {/* First preview without letterboxing */}
+      <div className="mb-2">
+        <p className="text-sm text-gray-500 mb-1">Fill and Crop:</p>
+        {hasScannedData ? (
+          <DynamicVideoPreview 
+            ratio={ratio}
+            width={width}
+            manualFocusPoint={selectedPoint}
+            letterboxEnabled={false}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center bg-gray-200 rounded"
+               style={{ width: `${width}px`, height: `${height}px` }}>
+            <div className="text-center p-4">
+              <p className="text-gray-600 text-sm mb-2">
+                {url ? "Scan video to see preview" : "Upload and scan a video"}
               </p>
-            )}
+              <p className="text-gray-500 text-xs">
+                {ratio} ratio (fill)
+              </p>
+            </div>
           </div>
-        </div>
+        )}
+      </div>
+      
+      {/* Second preview with letterboxing */}
+      <div>
+        <p className="text-sm text-gray-500 mb-1">With Letterboxing:</p>
+        {hasScannedData ? (
+          <DynamicVideoPreview 
+            ratio={ratio}
+            width={width}
+            manualFocusPoint={selectedPoint}
+            letterboxEnabled={true}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center bg-gray-200 rounded"
+               style={{ width: `${width}px`, height: `${height}px` }}>
+            <div className="text-center p-4">
+              <p className="text-gray-600 text-sm mb-2">
+                {url ? "Scan video to see preview" : "Upload and scan a video"}
+              </p>
+              <p className="text-gray-500 text-xs">
+                {ratio} ratio (letterbox)
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

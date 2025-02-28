@@ -47,16 +47,25 @@ class VideoScannerService {
    * Initialize scanner with video element
    */
   public initialize(videoElement: HTMLVideoElement): void {
+    console.log('Initializing video scanner with element:', videoElement);
     this.video = videoElement;
     
-    // Create offscreen canvas for processing
+    // Create a canvas element for frame extraction
     this.canvas = document.createElement('canvas');
-    this.canvas.width = this.video.videoWidth;
-    this.canvas.height = this.video.videoHeight;
+    console.log('Created canvas for frame extraction');
+    
+    // Get 2D context for drawing video frames
     this.ctx = this.canvas.getContext('2d');
     
-    console.log('VideoScannerService initialized with video dimensions:', 
-      this.video.videoWidth, 'x', this.video.videoHeight);
+    if (!this.ctx) {
+      console.error('Failed to get 2D context from canvas');
+      throw new Error('Failed to get 2D context from canvas');
+    } else {
+      console.log('Successfully obtained 2D context from canvas');
+    }
+    
+    this.isScanning = false;
+    this.shouldStop = false;
   }
 
   /**
@@ -74,43 +83,78 @@ class VideoScannerService {
   }
 
   /**
-   * Scan the entire video for subjects
+   * Scan video for subjects/objects
    */
   public async scanVideo(
     videoDuration: number,
     options: ScanOptions = {}
   ): Promise<Subject[]> {
-    if (!this.video || !this.canvas || !this.ctx) {
-      throw new Error('Scanner not initialized. Call initialize() first.');
+    console.log('Starting video scan with duration:', videoDuration, 'and options:', options);
+    
+    if (!this.video) {
+      const error = 'Video element not initialized. Call initialize() first.';
+      console.error(error);
+      throw new Error(error);
+    }
+
+    if (!this.ctx || !this.canvas) {
+      const error = 'Canvas context not initialized.';
+      console.error(error);
+      throw new Error(error);
     }
 
     if (this.isScanning) {
-      throw new Error('A scan is already in progress.');
+      const error = 'Already scanning. Stop current scan first.';
+      console.error(error);
+      throw new Error(error);
+    }
+
+    // Check if video is actually loaded
+    if (this.video.readyState < 2) { // HAVE_CURRENT_DATA = 2
+      console.log('Video not ready yet. Current readyState:', this.video.readyState);
+      console.log('Waiting for video to be ready...');
+      await new Promise<void>((resolve) => {
+        const checkReady = () => {
+          if (this.video && this.video.readyState >= 2) {
+            console.log('Video is now ready. readyState:', this.video.readyState);
+            resolve();
+          } else {
+            console.log('Video still not ready. readyState:', this.video?.readyState);
+            setTimeout(checkReady, 100);
+          }
+        };
+        checkReady();
+      });
     }
 
     // Merge default and provided options
-    const opts = { ...DEFAULT_OPTIONS, ...options };
+    const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
+    
+    // Initialize tracking
+    this.isScanning = true;
+    this.shouldStop = false;
+    
+    const { interval, minScore, minDetections, onProgress, onFrameProcessed } = mergedOptions;
+    
+    // Initialize object tracking
+    const subjects: Subject[] = [];
     
     try {
-      this.isScanning = true;
-      this.shouldStop = false;
-      
-      // Initialize subject detection
+      // Make sure subject detection service is initialized
       await subjectDetectionService.loadModel();
+    
+      // Update canvas dimensions to match video
+      this.updateCanvasDimensions();
       
-      // Calculate the total number of frames to process
-      const totalFrames = Math.ceil(videoDuration / opts.interval!);
-      console.log(`Starting video scan: ${totalFrames} frames to analyze at ${opts.interval} second intervals`);
-      
-      // Initialize variables to track progress
+      // Start time tracking
       const startTime = Date.now();
+      
+      // Calculate total frames to process
+      const totalFrames = Math.ceil(videoDuration / interval);
       let processedFrames = 0;
       
-      // Array to store detected subjects
-      const subjects: Subject[] = [];
-      
       // Process video at specified intervals
-      for (let time = 0; time < videoDuration && !this.shouldStop; time += opts.interval!) {
+      for (let time = 0; time < videoDuration && !this.shouldStop; time += interval) {
         // Update progress
         const currentTime = Date.now();
         const elapsedTime = (currentTime - startTime) / 1000;
@@ -130,8 +174,8 @@ class VideoScannerService {
         };
         
         // Call progress callback if provided
-        if (opts.onProgress) {
-          opts.onProgress(progress);
+        if (onProgress) {
+          onProgress(progress);
         }
         
         // Seek to the current time
@@ -154,15 +198,15 @@ class VideoScannerService {
         console.log(`Frame at ${time}s: detected ${detectionResult.objects.length} objects`);
         
         // Filter objects based on min score
-        const filteredObjects = detectionResult.objects.filter(obj => obj.score >= opts.minScore!);
+        const filteredObjects = detectionResult.objects.filter(obj => obj.score >= minScore);
         
         // Call frame processed callback if provided
-        if (opts.onFrameProcessed) {
-          opts.onFrameProcessed(time, filteredObjects);
+        if (onFrameProcessed) {
+          onFrameProcessed(time, filteredObjects);
         }
         
         // Track objects across frames
-        this.trackSubjects(subjects, filteredObjects, time, opts.similarityThreshold!);
+        this.trackSubjects(subjects, filteredObjects, time, mergedOptions.similarityThreshold);
         
         // Increment processed frames counter
         processedFrames++;
@@ -170,7 +214,7 @@ class VideoScannerService {
       
       // Filter subjects based on minimum detection count
       const finalSubjects = subjects.filter(subject => 
-        subject.positions.length >= opts.minDetections!
+        subject.positions.length >= minDetections
       );
       
       console.log(`Scan complete: found ${finalSubjects.length} subjects across ${processedFrames} frames`);
@@ -178,6 +222,35 @@ class VideoScannerService {
     } finally {
       this.isScanning = false;
     }
+  }
+  
+  /**
+   * Update canvas dimensions to match the current state of the video
+   */
+  private updateCanvasDimensions(): void {
+    if (!this.video || !this.canvas) {
+      console.error('Cannot update canvas dimensions - video or canvas not initialized');
+      return;
+    }
+    
+    // Get the actual video dimensions
+    const videoWidth = this.video.videoWidth;
+    const videoHeight = this.video.videoHeight;
+    
+    if (videoWidth === 0 || videoHeight === 0) {
+      console.warn('Video dimensions are invalid:', videoWidth, 'x', videoHeight);
+      console.log('Video element:', this.video);
+      console.log('Video ready state:', this.video.readyState);
+      return;
+    }
+    
+    console.log('Updating canvas dimensions to match video:', videoWidth, 'x', videoHeight);
+    
+    // Set canvas dimensions to match video
+    this.canvas.width = videoWidth;
+    this.canvas.height = videoHeight;
+    
+    console.log('Canvas dimensions updated:', this.canvas.width, 'x', this.canvas.height);
   }
   
   /**
