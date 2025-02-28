@@ -1,4 +1,4 @@
-import SubjectDetectionService, { DetectedObject } from './SubjectDetectionService';
+import subjectDetectionService, { DetectedObject } from './SubjectDetectionService';
 
 export interface ScanProgress {
   currentFrame: number;
@@ -54,6 +54,9 @@ class VideoScannerService {
     this.canvas.width = this.video.videoWidth;
     this.canvas.height = this.video.videoHeight;
     this.ctx = this.canvas.getContext('2d');
+    
+    console.log('VideoScannerService initialized with video dimensions:', 
+      this.video.videoWidth, 'x', this.video.videoHeight);
   }
 
   /**
@@ -92,12 +95,12 @@ class VideoScannerService {
       this.isScanning = true;
       this.shouldStop = false;
       
-      // Initialize subject detection service
-      const detectionService = new SubjectDetectionService();
-      await detectionService.initialize();
+      // Initialize subject detection
+      await subjectDetectionService.loadModel();
       
       // Calculate the total number of frames to process
       const totalFrames = Math.ceil(videoDuration / opts.interval!);
+      console.log(`Starting video scan: ${totalFrames} frames to analyze at ${opts.interval} second intervals`);
       
       // Initialize variables to track progress
       const startTime = Date.now();
@@ -147,10 +150,11 @@ class VideoScannerService {
         this.ctx!.drawImage(this.video!, 0, 0, this.canvas!.width, this.canvas!.height);
         
         // Detect objects in the current frame
-        const detectedObjects = await detectionService.detectObjectsInCanvas(this.canvas!);
+        const detectionResult = await subjectDetectionService.detectObjects(this.canvas!);
+        console.log(`Frame at ${time}s: detected ${detectionResult.objects.length} objects`);
         
         // Filter objects based on min score
-        const filteredObjects = detectedObjects.filter(obj => obj.score >= opts.minScore!);
+        const filteredObjects = detectionResult.objects.filter(obj => obj.score >= opts.minScore!);
         
         // Call frame processed callback if provided
         if (opts.onFrameProcessed) {
@@ -169,6 +173,7 @@ class VideoScannerService {
         subject.positions.length >= opts.minDetections!
       );
       
+      console.log(`Scan complete: found ${finalSubjects.length} subjects across ${processedFrames} frames`);
       return finalSubjects;
     } finally {
       this.isScanning = false;
