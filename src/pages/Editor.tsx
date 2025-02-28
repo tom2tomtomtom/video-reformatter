@@ -5,10 +5,7 @@ import VideoPlayer from '../components/video/VideoPlayer'
 import VideoTimeline from '../components/video/VideoTimeline'
 import FocusSelector from '../components/editor/FocusSelector'
 import AspectRatioPreview from '../components/video/AspectRatioPreview'
-import TestButtons from '../components/editor/TestButtons'
-import ClickDiagnostic from '../components/editor/ClickDiagnostic'
-import DirectHTMLButtons from '../components/editor/DirectHTMLButtons'
-import DirectHtmlFocusSelector from '../components/editor/DirectHtmlFocusSelector'
+import Button from '../components/common/Button'
 
 const Editor = () => {
   const navigate = useNavigate()
@@ -19,12 +16,9 @@ const Editor = () => {
       <div className="container mx-auto px-4 py-12 text-center">
         <h1 className="text-2xl font-bold mb-6">No Video Loaded</h1>
         <p className="text-gray-600 mb-6">Please upload a video to begin editing.</p>
-        <button 
-          onClick={() => navigate('/')} 
-          className="px-4 py-2 bg-blue-600 text-white rounded-md"
-        >
+        <Button onClick={() => navigate('/')} variant="primary">
           Go to Upload
-        </button>
+        </Button>
       </div>
     )
   }
@@ -33,25 +27,6 @@ const Editor = () => {
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold mb-6">Video Editor</h1>
-        
-        {/* Emergency Button for navigation */}
-        <div style={{ margin: '20px 0', backgroundColor: '#fff3cd', padding: '15px', border: '2px solid #ffc107', borderRadius: '4px' }}>
-          <h3 style={{ fontWeight: 'bold', marginBottom: '10px' }}>Emergency Navigation</h3>
-          <button 
-            onClick={() => navigate('/')} 
-            style={{ backgroundColor: '#ffc107', border: 'none', padding: '10px 20px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}
-          >
-            Go Back to Upload
-          </button>
-        </div>
-        
-        {/* Diagnostic tool */}
-        <ClickDiagnostic />
-        
-        {/* Test components */}
-        <TestButtons />
-        <DirectHTMLButtons />
-        <DirectHtmlFocusSelector />
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
           <div className="lg:col-span-2 relative">
@@ -75,12 +50,14 @@ const Editor = () => {
             </div>
             
             <div className="mt-8">
-              <button 
+              <Button 
                 onClick={() => navigate('/export')} 
-                className="w-full px-6 py-3 bg-blue-600 text-white text-lg rounded-md hover:bg-blue-700"
+                variant="primary"
+                size="lg"
+                fullWidth
               >
                 Continue to Export
-              </button>
+              </Button>
             </div>
           </div>
         </div>

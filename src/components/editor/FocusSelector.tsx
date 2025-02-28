@@ -7,6 +7,7 @@ import {
   updateFocusPoint 
 } from '../../store/slices/focusPointsSlice';
 import { updateCurrentTime } from '../../store/slices/videoSlice';
+import Button from "../common/Button";
 import subjectDetectionService from "../../services/SubjectDetectionService";
 import VideoScannerService from "../../services/VideoScannerService";
 import {
@@ -27,7 +28,6 @@ const FocusSelector: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectError, setDetectError] = useState<string | null>(null);
-  const [scanClicked, setScanClicked] = useState(false);
   
   const { url, currentTime, isPlaying, duration } = useSelector((state: RootState) => state.video);
   const { 
@@ -70,9 +70,6 @@ const FocusSelector: React.FC = () => {
   
   // Function to detect subjects in the current frame
   const detectSubjects = async () => {
-    console.log("Detect subjects button clicked");
-    alert("Detect subjects button clicked");
-    
     // Check if the video is loaded
     if (!url) {
       setDetectError('No video loaded. Please upload a video first.');
@@ -159,10 +156,6 @@ const FocusSelector: React.FC = () => {
   
   // Function to start scanning the entire video
   const startVideoScan = async () => {
-    console.log("Scan entire video button clicked");
-    alert("Scan entire video button clicked");
-    setScanClicked(true);
-    
     // Check if the video is loaded
     if (!url) {
       setDetectError('No video loaded. Please upload a video first.');
@@ -246,32 +239,30 @@ const FocusSelector: React.FC = () => {
       
       {/* Subject detection controls */}
       <div className="mb-4">
-        <div className="flex gap-4 mb-4">
-          {/* Direct HTML button without component */}
-          <div
+        <div className="flex gap-2 mb-2">
+          <Button
             onClick={detectSubjects}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md cursor-pointer hover:bg-blue-700"
-            style={{ userSelect: 'none' }}
+            disabled={isDetecting || isScanning}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md relative z-10"
           >
             {isDetecting ? 'Detecting...' : 'Detect Subjects'}
-          </div>
+          </Button>
           
           {isScanning ? (
-            <div
+            <Button
               onClick={stopVideoScan}
-              className="px-4 py-2 bg-red-600 text-white rounded-md cursor-pointer hover:bg-red-700"
-              style={{ userSelect: 'none' }}
+              className="px-4 py-2 bg-red-600 text-white rounded-md relative z-10"
             >
               Stop Scanning
-            </div>
+            </Button>
           ) : (
-            <div
+            <Button
               onClick={startVideoScan}
-              className="px-4 py-2 bg-green-600 text-white rounded-md cursor-pointer hover:bg-green-700"
-              style={{ userSelect: 'none' }}
+              disabled={isDetecting || isReviewMode}
+              className="px-4 py-2 bg-green-600 text-white rounded-md relative z-10"
             >
-              Scan Entire Video {scanClicked ? '(Clicked)' : ''}
-            </div>
+              Scan Entire Video
+            </Button>
           )}
         </div>
         
