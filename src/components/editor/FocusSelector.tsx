@@ -22,19 +22,14 @@ import ProgressIndicator from '../common/ProgressIndicator';
 import ScanConfigPanel from './ScanConfigPanel';
 import ScanReviewPanel from './ScanReviewPanel';
 
-interface FocusSelectorProps {
-  videoElement: HTMLVideoElement | null;
-}
-
-const FocusSelector: React.FC<FocusSelectorProps> = ({ videoElement }) => {
+const FocusSelector: React.FC = () => {
   const dispatch = useDispatch();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectError, setDetectError] = useState<string | null>(null);
   
-  const currentTime = useSelector((state: RootState) => state.video.currentTime);
-  const isPlaying = useSelector((state: RootState) => state.video.isPlaying);
-  const duration = useSelector((state: RootState) => state.video.duration);
+  const { url, currentTime, isPlaying, duration } = useSelector((state: RootState) => state.video);
   const { 
     isScanning, 
     progress, 
@@ -43,10 +38,19 @@ const FocusSelector: React.FC<FocusSelectorProps> = ({ videoElement }) => {
     scanOptions 
   } = useSelector((state: RootState) => state.videoScan);
   
+  // Get a reference to the video element
+  useEffect(() => {
+    // Find the video element on the page (assuming ReactPlayer renders it)
+    const videoElement = document.querySelector('video');
+    if (videoElement) {
+      videoRef.current = videoElement;
+    }
+  }, [url]); // Re-run when URL changes (new video loaded)
+  
   // Function to detect subjects in the current frame
   const detectSubjects = async () => {
-    if (!videoElement || !canvasRef.current) {
-      setDetectError('Video not loaded');
+    if (!videoRef.current || !canvasRef.current) {
+      setDetectError('Video not loaded or properly initialized');
       return;
     }
     
@@ -59,8 +63,8 @@ const FocusSelector: React.FC<FocusSelectorProps> = ({ videoElement }) => {
       
       // Capture the current frame to canvas
       const canvas = canvasRef.current;
-      canvas.width = videoElement.videoWidth;
-      canvas.height = videoElement.videoHeight;
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
       const ctx = canvas.getContext('2d');
       
       if (!ctx) {
@@ -69,7 +73,7 @@ const FocusSelector: React.FC<FocusSelectorProps> = ({ videoElement }) => {
       }
       
       // Draw current frame to canvas
-      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
       
       // Detect objects in canvas
       const detectedObjects = await detectionService.detectObjectsInCanvas(canvas);
@@ -105,20 +109,21 @@ const FocusSelector: React.FC<FocusSelectorProps> = ({ videoElement }) => {
   
   // Function to start scanning the entire video
   const startVideoScan = async () => {
-    if (!videoElement) {
+    if (!videoRef.current) {
+      setDetectError('Video not loaded or properly initialized');
       return;
     }
     
-    const wasPlaying = !videoElement.paused;
+    const wasPlaying = !videoRef.current.paused;
     if (wasPlaying) {
-      videoElement.pause();
+      videoRef.current.pause();
     }
     
     try {
       dispatch(startScan());
       
       const videoScanner = new VideoScannerService();
-      videoScanner.initialize(videoElement);
+      videoScanner.initialize(videoRef.current);
       
       const subjects = await videoScanner.scanVideo(duration, {
         interval: scanOptions.interval,
@@ -134,10 +139,11 @@ const FocusSelector: React.FC<FocusSelectorProps> = ({ videoElement }) => {
     } catch (error) {
       console.error('Error scanning video:', error);
       dispatch(stopScan());
+      setDetectError('Error scanning video: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       // Restore previous playback state
-      if (wasPlaying) {
-        videoElement.play();
+      if (wasPlaying && videoRef.current) {
+        videoRef.current.play();
       }
     }
   };
@@ -168,7 +174,7 @@ const FocusSelector: React.FC<FocusSelectorProps> = ({ videoElement }) => {
         <div className="flex gap-2 mb-2">
           <Button
             onClick={detectSubjects}
-            disabled={isDetecting || !videoElement || isScanning}
+            disabled={isDetecting || !url || isScanning}
             className="px-4 py-2 bg-blue-600 text-white rounded-md"
           >
             {isDetecting ? 'Detecting...' : 'Detect Subjects'}
@@ -184,7 +190,7 @@ const FocusSelector: React.FC<FocusSelectorProps> = ({ videoElement }) => {
           ) : (
             <Button
               onClick={startVideoScan}
-              disabled={!videoElement || isDetecting || isReviewMode}
+              disabled={!url || isDetecting || isReviewMode}
               className="px-4 py-2 bg-green-600 text-white rounded-md"
             >
               Scan Entire Video
@@ -220,7 +226,7 @@ const FocusSelector: React.FC<FocusSelectorProps> = ({ videoElement }) => {
       {/* Results review panel */}
       {isReviewMode && (
         <ScanReviewPanel
-          videoElement={videoElement}
+          videoElement={videoRef.current}
           onFinalize={handleScanFinalized}
         />
       )}
