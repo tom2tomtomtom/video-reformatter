@@ -1,0 +1,62 @@
+/* Diagnostic styles for troubleshooting UI issues */
+
+/* 
+ * This CSS will be conditionally loaded to help diagnose 
+ * issues with overlapping elements and event blocking
+ */
+
+/* Show outlines around all elements to identify boundaries */
+.diagnostic-mode * {
+  outline: 1px dashed rgba(255, 0, 0, 0.3) !important;
+}
+
+/* Highlight elements with position: absolute or fixed */
+.diagnostic-mode *[style*="position: absolute"],
+.diagnostic-mode *[style*="position:absolute"],
+.diagnostic-mode *[style*="position: fixed"],
+.diagnostic-mode *[style*="position:fixed"],
+.diagnostic-mode [class*="absolute"],
+.diagnostic-mode [class*="fixed"] {
+  outline: 2px solid red !important;
+}
+
+/* Add class names as labels to major elements */
+.diagnostic-mode div:not(:empty)::after,
+.diagnostic-mode section:not(:empty)::after {
+  content: attr(class);
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 2px;
+  max-width: 200px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* Make all elements with pointer-events: none stand out */
+.diagnostic-mode *[style*="pointer-events: none"],
+.diagnostic-mode *[style*="pointer-events:none"] {
+  background-color: rgba(255, 0, 0, 0.2) !important;
+}
+
+/* All interactive elements get a highlight */
+.diagnostic-mode button,
+.diagnostic-mode a,
+.diagnostic-mode [role="button"],
+.diagnostic-mode [onclick],
+.diagnostic-mode input[type="button"],
+.diagnostic-mode input[type="submit"] {
+  outline: 2px solid green !important;
+}
+
+/* Elements with high z-index */
+.diagnostic-mode *[style*="z-index:"],
+.diagnostic-mode *[style*="z-index: "] {
+  outline: 2px solid blue !important;
+}
