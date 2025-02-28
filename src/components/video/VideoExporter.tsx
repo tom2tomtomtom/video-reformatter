@@ -1,111 +1,282 @@
-import { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useSelector } from 'react-redux'
 import { RootState } from '../../store'
 import Button from '../common/Button'
+import videoExportService, { ExportProgress, VideoExportService } from '../../services/VideoExportService'
 
-const ASPECT_RATIOS = [
-  { label: 'Instagram/TikTok Story (9:16)', value: '9:16' },
-  { label: 'Instagram Feed (1:1)', value: '1:1' },
-  { label: 'Instagram Feed Optimal (4:5)', value: '4:5' },
-  { label: 'Original (16:9)', value: '16:9' },
+// Available export formats
+const EXPORT_FORMATS = [
+  '16:9', // Landscape HD
+  '9:16', // Portrait/Mobile
+  '1:1',  // Square
+  '4:5'   // Instagram optimal
 ]
 
 const VideoExporter = () => {
-  const { url } = useSelector((state: RootState) => state.video)
+  const { url, videoId } = useSelector((state: RootState) => state.video)
   const { points } = useSelector((state: RootState) => state.focusPoints)
   
   const [selectedFormats, setSelectedFormats] = useState<string[]>(['9:16'])
   const [isExporting, setIsExporting] = useState(false)
-  const [exportProgress, setExportProgress] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const [exportProgress, setExportProgress] = useState<Record<string, number>>({})
+  const [exportErrors, setExportErrors] = useState<Record<string, string>>({})
+  const [isFFmpegLoaded, setIsFFmpegLoaded] = useState(false)
+  const [useLetterboxing, setUseLetterboxing] = useState(true)
+  const [isPending, setIsPending] = useState(false)
+  
+  // Reference to video export service
+  const videoExportServiceRef = useRef<VideoExportService | null>(null);
+
+  // Initialize on component mount
+  useEffect(() => {
+    const initializeExportService = async () => {
+      try {
+        // Create and initialize service
+        const service = new VideoExportService();
+        await service.initialize();
+        videoExportServiceRef.current = service;
+        setIsFFmpegLoaded(true);
+        console.log('Video export service initialised');
+      } catch (error) {
+        console.error('Failed to initialise video export service:', error);
+        setExportErrors({ init: `Failed to initialise video export service: ${error}` });
+      }
+    };
+
+    initializeExportService();
+
+    // Cleanup on unmount
+    return () => {
+      videoExportServiceRef.current = null;
+    };
+  }, []);
+
+  // Handle the export process
+  useEffect(() => {
+    if (!isPending) return;
+    
+    const exportVideos = async () => {
+      if (!url || selectedFormats.length === 0) {
+        setError('No video to export or no format selected. Please upload a video and select at least one format.');
+        setIsPending(false);
+        return;
+      }
+      
+      if (!videoExportServiceRef.current || !isFFmpegLoaded) {
+        try {
+          // Try to initialise again if not loaded
+          const service = new VideoExportService();
+          await service.initialize();
+          videoExportServiceRef.current = service;
+          setIsFFmpegLoaded(true);
+          console.log('Video export service initialised on demand');
+        } catch (error) {
+          console.error('Failed to initialise video export service:', error);
+          setExportErrors({ init: `Failed to initialise FFmpeg: ${error}` });
+          return;
+        }
+      }
+
+      setIsExporting(true);
+      setError(null);
+      setExportErrors({});
+      
+      // Initialise progress tracking for each format
+      const initialProgress: Record<string, number> = {};
+      selectedFormats.forEach(format => {
+        initialProgress[format] = 0;
+      });
+      
+      setExportProgress(initialProgress);
+      
+      try {
+        // Process formats sequentially to avoid memory issues
+        for (const format of selectedFormats) {
+          // Find focus point for this format and video
+          const focusPoint = points.find(p => p.ratio === format && p.videoId === videoId);
+          
+          // Use the focus point or default to centre
+          const focusX = focusPoint ? focusPoint.x : 0.5;
+          const focusY = focusPoint ? focusPoint.y : 0.5;
+          
+          console.log(`Exporting ${format} with focus point:`, { x: focusX, y: focusY });
+          
+          // Export the video
+          const videoUrl = await videoExportServiceRef.current.exportVideo(
+            url,
+            {
+              ratio: format,
+              focusX: focusX || 0.5,
+              focusY: focusY || 0.5,
+              quality: 'medium',
+              letterbox: useLetterboxing,
+            },
+            (progress) => {
+              setExportProgress(prev => ({
+                ...prev,
+                [format]: progress.progress
+              }));
+            }
+          );
+          
+          // Download the exported video
+          const a = document.createElement('a');
+          a.href = videoUrl;
+          a.download = `video-${format.replace(':', '_')}.mp4`;
+          document.body.appendChild(a);
+          a.click();
+          
+          // Clean up
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(videoUrl);
+          }, 100);
+          
+          // Mark as complete
+          setExportProgress(prev => ({
+            ...prev,
+            [format]: 100
+          }));
+        }
+      } catch (err) {
+        console.error('Export failed:', err);
+        setError(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setIsExporting(false);
+        setIsPending(false);
+      }
+    };
+    
+    exportVideos();
+  }, [isPending, url, videoId, selectedFormats, points, useLetterboxing]);
   
   const toggleFormat = (format: string) => {
     if (selectedFormats.includes(format)) {
-      setSelectedFormats(selectedFormats.filter(f => f !== format))
+      setSelectedFormats(selectedFormats.filter(f => f !== format));
     } else {
-      setSelectedFormats([...selectedFormats, format])
+      setSelectedFormats([...selectedFormats, format]);
     }
-  }
+  };
   
-  const handleExport = async () => {
-    if (!url || selectedFormats.length === 0) return
+  // Calculate overall progress
+  const calculateOverallProgress = (): number => {
+    if (selectedFormats.length === 0) return 0;
     
-    setIsExporting(true)
-    setExportProgress(0)
-    
-    try {
-      // Simulate export process
-      for (let i = 1; i <= 10; i++) {
-        await new Promise(resolve => setTimeout(resolve, 500))
-        setExportProgress(i * 10)
-      }
-      
-      // In a real implementation, we would use FFmpeg here to process the video
-      // based on the selected formats and focus points
-      
-      alert('Export completed! In a real implementation, files would be downloaded.')
-    } catch (error) {
-      console.error('Export failed:', error)
-      alert('Export failed. Please try again.')
-    } finally {
-      setIsExporting(false)
-    }
-  }
+    const totalProgress = Object.values(exportProgress).reduce((sum, progress) => sum + progress, 0);
+    return Math.round(totalProgress / selectedFormats.length);
+  };
   
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-xl font-semibold mb-4">Export Video</h2>
+    <div className="rounded-lg bg-white p-6 shadow-md">
+      <h2 className="text-xl font-bold mb-4">Export Video</h2>
       
-      {!url ? (
-        <p className="text-gray-500">Please load a video before exporting.</p>
-      ) : (
-        <>
-          <div className="mb-6">
-            <h3 className="text-lg font-medium mb-2">Select Export Formats</h3>
-            <div className="space-y-2">
-              {ASPECT_RATIOS.map(ratio => (
-                <label key={ratio.value} className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={selectedFormats.includes(ratio.value)}
-                    onChange={() => toggleFormat(ratio.value)}
-                    className="mr-2 h-5 w-5"
-                  />
-                  {ratio.label}
-                </label>
-              ))}
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+          {error}
+        </div>
+      )}
+      
+      {Object.values(exportErrors).length > 0 && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+          {Object.values(exportErrors).map((error, index) => (
+            <p key={index}>{error}</p>
+          ))}
+        </div>
+      )}
+      
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Select Export Formats
+        </label>
+        
+        <div className="space-y-2">
+          {EXPORT_FORMATS.map(format => (
+            <div key={format} className="flex items-center">
+              <input
+                type="checkbox"
+                id={`format-${format}`}
+                checked={selectedFormats.includes(format)}
+                onChange={() => toggleFormat(format)}
+                disabled={isExporting}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor={`format-${format}`} className="ml-2 block text-sm text-gray-900">
+                {format} {format === '9:16' ? '(Portrait/Mobile)' : format === '1:1' ? '(Square)' : format === '16:9' ? '(Landscape HD)' : '(Instagram optimal)'}
+              </label>
+              
+              {exportProgress[format] > 0 && exportProgress[format] < 100 && (
+                <div className="ml-4 flex-1">
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div 
+                      className="bg-blue-600 h-2.5 rounded-full" 
+                      style={{ width: `${exportProgress[format]}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+              
+              {exportProgress[format] === 100 && (
+                <span className="ml-4 text-green-600 text-sm">Complete</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      <div className="mb-4">
+        <div className="flex items-center">
+          <input
+            id="letterboxing"
+            name="letterboxing"
+            type="checkbox"
+            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            checked={useLetterboxing}
+            onChange={(e) => setUseLetterboxing(e.target.checked)}
+          />
+          <label htmlFor="letterboxing" className="ml-2 block text-sm font-medium text-gray-700">
+            Use focus-centred cropping with letterboxing (recommended)
+          </label>
+        </div>
+        <p className="mt-1 text-sm text-gray-500">
+          When enabled, videos will be cropped around your focus point and then letterboxed to fit the selected aspect ratio.
+        </p>
+      </div>
+      
+      {isExporting ? (
+        <div>
+          <div className="mb-2">
+            <div className="w-full bg-gray-200 rounded-full h-4">
+              <div 
+                className="bg-blue-600 h-4 rounded-full" 
+                style={{ width: `${calculateOverallProgress()}%` }}
+              ></div>
             </div>
           </div>
           
-          <div className="mb-6">
-            <h3 className="text-lg font-medium mb-2">Focus Points</h3>
-            {points.length === 0 ? (
-              <p className="text-yellow-600">No focus points defined. Export will use center cropping.</p>
-            ) : (
-              <p className="text-green-600">{points.length} focus points will be used for intelligent framing.</p>
-            )}
+          <div className="text-center text-sm text-gray-500 mb-4">
+            Exporting... {calculateOverallProgress()}%
           </div>
           
-          {isExporting ? (
-            <div className="mb-4">
-              <div className="h-2 bg-gray-200 rounded overflow-hidden">
-                <div 
-                  className="h-full bg-blue-600 transition-all duration-300"
-                  style={{ width: `${exportProgress}%` }}
-                />
-              </div>
-              <p className="text-sm text-center mt-2">Exporting... {exportProgress}%</p>
-            </div>
-          ) : (
+          <div className="mt-4">
             <Button
-              onClick={handleExport}
-              disabled={selectedFormats.length === 0}
+              disabled
               fullWidth
               size="lg"
             >
-              Export Selected Formats
+              Exporting...
             </Button>
-          )}
-        </>
+          </div>
+        </div>
+      ) : (
+        <Button
+          onClick={() => setIsPending(true)}
+          disabled={selectedFormats.length === 0}
+          fullWidth
+          size="lg"
+        >
+          Export Selected Formats
+        </Button>
       )}
     </div>
   )

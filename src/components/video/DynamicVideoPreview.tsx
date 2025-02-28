@@ -163,6 +163,11 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
       y: activeFocusPoint.y
     } : { x: 0.5, y: 0.5 }); // Default to center
     
+    // Add debug logging for export troubleshooting
+    console.log(`[${ratio}] Focus point: x=${focusToUse.x}, y=${focusToUse.y}`);
+    console.log(`[${ratio}] Source dimensions: ${videoWidth}x${videoHeight}, ratio=${videoWidth/videoHeight}`);
+    console.log(`[${ratio}] Target ratio: ${targetRatio}`);
+    
     if (letterboxEnabled) {
       // For letterboxing mode:
       // First crop to a consistent square around focus point
@@ -180,6 +185,10 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
       // Use percentages for responsive sizing
       const posX = (cropLeft + cropWidth/2);
       const posY = (cropTop + cropHeight/2);
+      
+      // Log detailed crop information for export troubleshooting
+      console.log(`[${ratio}] LETTERBOX MODE - Square crop: ${cropWidth}% x ${cropHeight}% at (${cropLeft}%, ${cropTop}%)`);
+      console.log(`[${ratio}] Scale: ${Math.max(scaleX, scaleY)}, Position: ${posX}%, ${posY}%`);
       
       return {
         objectFit: 'cover' as const,
@@ -221,6 +230,9 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
         xOffset = 50;
         yOffset = 50;
       }
+      
+      // Log detailed crop information for export troubleshooting
+      console.log(`[${ratio}] FILL MODE - Scale: ${scaleFactor}, Position: ${xOffset}%, ${yOffset}%`);
       
       return {
         position: 'absolute',
