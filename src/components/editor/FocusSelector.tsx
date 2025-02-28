@@ -40,15 +40,53 @@ const FocusSelector: React.FC = () => {
   
   // Get a reference to the video element
   useEffect(() => {
-    // Find the video element on the page (assuming ReactPlayer renders it)
-    const videoElement = document.querySelector('video');
-    if (videoElement) {
-      videoRef.current = videoElement;
-    }
+    // Reset error when URL changes
+    setDetectError(null);
+    
+    // Find the video element on the page
+    const findVideoElement = () => {
+      // Try to find the video element by checking all video tags on the page
+      const videoElements = document.querySelectorAll('video');
+      console.log('Found video elements:', videoElements.length);
+      
+      if (videoElements.length > 0) {
+        videoRef.current = videoElements[0];
+        console.log('Video element found:', videoRef.current);
+      } else {
+        console.warn('No video element found on the page');
+        videoRef.current = null;
+      }
+    };
+    
+    // Try immediately and then retry after a delay to ensure the player has mounted
+    findVideoElement();
+    
+    const timeoutId = setTimeout(() => {
+      findVideoElement();
+    }, 1000);
+    
+    return () => clearTimeout(timeoutId);
   }, [url]); // Re-run when URL changes (new video loaded)
   
   // Function to detect subjects in the current frame
   const detectSubjects = async () => {
+    // Check if the video is loaded
+    if (!url) {
+      setDetectError('No video loaded. Please upload a video first.');
+      return;
+    }
+    
+    // Re-attempt to find the video element if it's not currently available
+    if (!videoRef.current) {
+      const videoElements = document.querySelectorAll('video');
+      if (videoElements.length > 0) {
+        videoRef.current = videoElements[0];
+      } else {
+        setDetectError('Video element not found. Please reload the page.');
+        return;
+      }
+    }
+    
     if (!videoRef.current || !canvasRef.current) {
       setDetectError('Video not loaded or properly initialized');
       return;
@@ -109,6 +147,24 @@ const FocusSelector: React.FC = () => {
   
   // Function to start scanning the entire video
   const startVideoScan = async () => {
+    // Check if the video is loaded
+    if (!url) {
+      setDetectError('No video loaded. Please upload a video first.');
+      return;
+    }
+    
+    // Re-attempt to find the video element if it's not currently available
+    if (!videoRef.current) {
+      const videoElements = document.querySelectorAll('video');
+      if (videoElements.length > 0) {
+        videoRef.current = videoElements[0];
+        console.log('Found video element for scanning:', videoRef.current);
+      } else {
+        setDetectError('Video element not found. Please reload the page.');
+        return;
+      }
+    }
+    
     if (!videoRef.current) {
       setDetectError('Video not loaded or properly initialized');
       return;
@@ -123,8 +179,10 @@ const FocusSelector: React.FC = () => {
       dispatch(startScan());
       
       const videoScanner = new VideoScannerService();
+      console.log('Initializing scanner with video element:', videoRef.current);
       videoScanner.initialize(videoRef.current);
       
+      console.log('Starting video scan with duration:', duration);
       const subjects = await videoScanner.scanVideo(duration, {
         interval: scanOptions.interval,
         minScore: scanOptions.minScore,
@@ -135,6 +193,7 @@ const FocusSelector: React.FC = () => {
         }
       });
       
+      console.log('Scan complete, detected subjects:', subjects);
       dispatch(scanComplete(subjects));
     } catch (error) {
       console.error('Error scanning video:', error);
