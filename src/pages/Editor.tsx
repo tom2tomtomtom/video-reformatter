@@ -7,6 +7,7 @@ import FocusSelector from '../components/editor/FocusSelector'
 import AspectRatioPreview from '../components/video/AspectRatioPreview'
 import Button from '../components/common/Button'
 import TestButtons from '../components/editor/TestButtons'
+import ClickDiagnostic from '../components/editor/ClickDiagnostic'
 
 const Editor = () => {
   const navigate = useNavigate()
@@ -31,6 +32,9 @@ const Editor = () => {
         
         {/* Emergency Test Buttons - For debugging only */}
         <TestButtons />
+        
+        {/* Add the diagnostic component */}
+        <ClickDiagnostic />
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
           <div className="lg:col-span-2">
