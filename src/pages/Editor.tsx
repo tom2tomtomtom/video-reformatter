@@ -8,6 +8,7 @@ import AspectRatioPreview from '../components/video/AspectRatioPreview'
 import Button from '../components/common/Button'
 import TestButtons from '../components/editor/TestButtons'
 import ClickDiagnostic from '../components/editor/ClickDiagnostic'
+import DirectHTMLButtons from '../components/editor/DirectHTMLButtons'
 
 const Editor = () => {
   const navigate = useNavigate()
@@ -18,9 +19,12 @@ const Editor = () => {
       <div className="container mx-auto px-4 py-12 text-center">
         <h1 className="text-2xl font-bold mb-6">No Video Loaded</h1>
         <p className="text-gray-600 mb-6">Please upload a video to begin editing.</p>
-        <Button onClick={() => navigate('/')} variant="primary">
+        <button 
+          onClick={() => navigate('/')} 
+          className="px-4 py-2 bg-blue-600 text-white rounded-md"
+        >
           Go to Upload
-        </Button>
+        </button>
       </div>
     )
   }
@@ -30,20 +34,38 @@ const Editor = () => {
       <div className="max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold mb-6">Video Editor</h1>
         
-        {/* Emergency Test Buttons - For debugging only */}
+        {/* Emergency Button for navigation */}
+        <div style={{ margin: '20px 0', backgroundColor: '#fff3cd', padding: '15px', border: '2px solid #ffc107', borderRadius: '4px' }}>
+          <h3 style={{ fontWeight: 'bold', marginBottom: '10px' }}>Emergency Navigation</h3>
+          <button 
+            onClick={() => navigate('/')} 
+            style={{ backgroundColor: '#ffc107', border: 'none', padding: '10px 20px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            Go Back to Upload
+          </button>
+        </div>
+        
+        {/* Test components */}
         <TestButtons />
+        <DirectHTMLButtons />
         
         {/* Add the diagnostic component */}
         <ClickDiagnostic />
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
-          <div className="lg:col-span-2">
-            <VideoPlayer />
-            <VideoTimeline />
-            <FocusSelector />
+          <div className="lg:col-span-2 relative">
+            <div className="relative z-10">
+              <VideoPlayer />
+            </div>
+            <div className="relative z-20">
+              <VideoTimeline />
+            </div>
+            <div className="relative z-30">
+              <FocusSelector />
+            </div>
           </div>
           
-          <div>
+          <div className="relative z-10">
             <h2 className="text-xl font-semibold mb-4">Format Preview</h2>
             <div className="space-y-6">
               <AspectRatioPreview ratio="9:16" width={240} />
@@ -52,14 +74,12 @@ const Editor = () => {
             </div>
             
             <div className="mt-8">
-              <Button 
+              <button 
                 onClick={() => navigate('/export')} 
-                variant="primary"
-                size="lg"
-                fullWidth
+                className="w-full px-6 py-3 bg-blue-600 text-white text-lg rounded-md hover:bg-blue-700"
               >
                 Continue to Export
-              </Button>
+              </button>
             </div>
           </div>
         </div>
