@@ -95,11 +95,38 @@ const Home = () => {
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-12">
+        <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-4">Redbaez Reformatter</h1>
-          <p className="text-xl text-gray-600 mb-8">
+          <p className="text-xl text-gray-600 mb-4">
             Find perfect clips from TV drama footage and transform them into ideal formats for social media
           </p>
+          
+          <div className="bg-blue-50 p-4 rounded-lg mb-8 text-center">
+            <p className="mb-2 text-blue-800 font-medium">Complete Video Workflow:</p>
+            <div className="flex justify-center">
+              <div className="flex items-center text-blue-700 text-sm">
+                <div className="flex flex-col items-center">
+                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">1</div>
+                  <span className="mt-1">Upload</span>
+                </div>
+                <div className="w-8 border-t border-blue-300 mx-1"></div>
+                <div className="flex flex-col items-center">
+                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">2</div>
+                  <span className="mt-1">Find Clips</span>
+                </div>
+                <div className="w-8 border-t border-blue-300 mx-1"></div>
+                <div className="flex flex-col items-center">
+                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">3</div>
+                  <span className="mt-1">Track Objects</span>
+                </div>
+                <div className="w-8 border-t border-blue-300 mx-1"></div>
+                <div className="flex flex-col items-center">
+                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">4</div>
+                  <span className="mt-1">Export</span>
+                </div>
+              </div>
+            </div>
+          </div>
           
           <div className="max-w-md mx-auto">
             {/* Original approach (if it doesn't work, it will be supplemented by the components below) */}
@@ -165,7 +192,7 @@ const Home = () => {
                         onClick={() => navigateToPath('/clips')}
                         className="bg-blue-50 border-2 border-blue-200 p-4 rounded-lg text-left hover:bg-blue-100 transition-colors"
                       >
-                        <div className="font-medium">Find & Edit Clips</div>
+                        <div className="font-medium">Find & Edit Clips <span className="text-blue-600">(Recommended)</span></div>
                         <div className="text-sm text-gray-600">Automatically detect 8-15 second clips from longer videos</div>
                       </button>
                       
@@ -173,8 +200,8 @@ const Home = () => {
                         onClick={() => navigateToPath('/editor')}
                         className="bg-blue-50 border-2 border-blue-200 p-4 rounded-lg text-left hover:bg-blue-100 transition-colors"
                       >
-                        <div className="font-medium">Start From Object Tracking</div>
-                        <div className="text-sm text-gray-600">Skip to object detection for videos that are already short</div>
+                        <div className="font-medium">Skip to Object Tracking</div>
+                        <div className="text-sm text-gray-600">For videos that are already short and don't need trimming</div>
                       </button>
                     </div>
                   </div>
@@ -195,32 +222,50 @@ const Home = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
           <div onClick={() => navigateToPath('/clips')} className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:bg-blue-50 transition-colors">
-            <h2 className="text-xl font-semibold mb-3">Step 1: Find Perfect Clips</h2>
-            <p className="text-gray-600">
+            <div className="mb-2 flex justify-between items-start">
+              <h2 className="text-xl font-semibold">Step 1: Find Clips</h2>
+              <div className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">Required</div>
+            </div>
+            <p className="text-gray-600 mb-3">
               Automatically detect and trim perfect 8-15 second clips from longer videos. Edit with frame-by-frame precision.
             </p>
-            <div className="mt-4 text-blue-600 font-medium">
+            <div className="mt-4 text-blue-600 font-medium flex items-center">
               Clip Finder
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
             </div>
           </div>
           
           <div onClick={() => navigateToPath('/editor')} className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:bg-blue-50 transition-colors">
-            <h2 className="text-xl font-semibold mb-3">Step 2: Track Important Objects</h2>
-            <p className="text-gray-600">
+            <div className="mb-2 flex justify-between items-start">
+              <h2 className="text-xl font-semibold">Step 2: Set Focus</h2>
+              <div className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">Required</div>
+            </div>
+            <p className="text-gray-600 mb-3">
               Identify important subjects in your clips and set focus points for automatic tracking across different formats.
             </p>
-            <div className="mt-4 text-blue-600 font-medium">
+            <div className="mt-4 text-blue-600 font-medium flex items-center">
               Object Tracker
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
             </div>
           </div>
           
           <div onClick={() => navigateToPath('/export')} className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:bg-blue-50 transition-colors">
-            <h2 className="text-xl font-semibold mb-3">Step 3: Export for Social</h2>
-            <p className="text-gray-600">
+            <div className="mb-2 flex justify-between items-start">
+              <h2 className="text-xl font-semibold">Step 3: Export</h2>
+              <div className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">Final Step</div>
+            </div>
+            <p className="text-gray-600 mb-3">
               Generate videos in multiple formats simultaneously: 9:16 for Stories/TikTok, 1:1 for feed posts, and 4:5 for Instagram.
             </p>
-            <div className="mt-4 text-blue-600 font-medium">
+            <div className="mt-4 text-blue-600 font-medium flex items-center">
               Export Center
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
             </div>
           </div>
         </div>
@@ -244,6 +289,14 @@ const Home = () => {
               <span className="font-medium">Export for all platforms</span> - Generate videos in multiple aspect ratios ready for social media
             </li>
           </ol>
+          
+          <div className="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded">
+            <h3 className="font-medium text-yellow-800 mb-1">Pro Tip: Complete Workflow</h3>
+            <p className="text-sm text-yellow-700">
+              For the best results, follow the complete workflow: Upload → Find Clips → Track Objects → Export. 
+              Each step builds on the previous and helps create the perfect social media videos!
+            </p>
+          </div>
         </div>
       </div>
     </div>
