@@ -108,13 +108,21 @@ const ClipDetection: React.FC = () => {
   
   // Handle creating a batch for reformatting
   const handleCreateBatch = () => {
-    if (selectedClips.length === 0) return;
+    if (selectedClips.length === 0) {
+      alert("Please select at least one clip to continue.");
+      return;
+    }
     
     const name = batchName || `Batch ${new Date().toLocaleString()}`;
+    
+    // Create the batch in Redux
     dispatch(createClipBatch({
       name,
       clips: selectedClips
     }));
+    
+    // Show confirmation and navigate
+    console.log(`Created batch with ${selectedClips.length} clips, navigating to editor...`);
     
     // Navigate to reformatter/editor
     navigate('/editor');
