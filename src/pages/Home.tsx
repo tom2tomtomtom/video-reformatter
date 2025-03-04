@@ -53,11 +53,11 @@ const Home = () => {
       }))
       console.log("Redux dispatch complete")
       
-      // Navigate to editor
-      console.log("Preparing to navigate to editor...")
+      // Navigate to clips detection page instead of editor
+      console.log("Preparing to navigate to clips detection...")
       window.setTimeout(() => {
-        console.log("Now navigating to editor...")
-        navigate('/editor')
+        console.log("Now navigating to clips detection...")
+        navigate('/clips')
       }, 500) // Add a slight delay to ensure Redux state is updated
     } catch (error) {
       console.error("Error handling file:", error)
