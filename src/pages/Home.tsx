@@ -92,16 +92,6 @@ const Home = () => {
     navigate(path)
   }
   
-  const handleDurationSelection = (isShortClip: boolean) => {
-    if (isShortClip) {
-      // If it's already a short clip (under 15 seconds), skip clip detection
-      navigateToPath('/editor')
-    } else {
-      // If it's longer content, go to clip detection first
-      navigateToPath('/clips')
-    }
-  }
-  
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-4xl mx-auto">
@@ -169,22 +159,22 @@ const Home = () => {
                 
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-lg font-medium mb-2">What type of video did you upload?</h3>
+                    <h3 className="text-lg font-medium mb-2">Choose Your Workflow:</h3>
                     <div className="grid grid-cols-1 gap-3">
                       <button 
-                        onClick={() => handleDurationSelection(false)}
+                        onClick={() => navigateToPath('/clips')}
                         className="bg-blue-50 border-2 border-blue-200 p-4 rounded-lg text-left hover:bg-blue-100 transition-colors"
                       >
-                        <div className="font-medium">Longer content (TV show, trailer, etc.)</div>
-                        <div className="text-sm text-gray-600">I need to find and extract short clips first</div>
+                        <div className="font-medium">Find & Edit Clips</div>
+                        <div className="text-sm text-gray-600">Automatically detect 8-15 second clips from longer videos</div>
                       </button>
                       
                       <button 
-                        onClick={() => handleDurationSelection(true)}
+                        onClick={() => navigateToPath('/editor')}
                         className="bg-blue-50 border-2 border-blue-200 p-4 rounded-lg text-left hover:bg-blue-100 transition-colors"
                       >
-                        <div className="font-medium">Short clip (already 15 seconds or less)</div>
-                        <div className="text-sm text-gray-600">Skip to reformatting for different aspect ratios</div>
+                        <div className="font-medium">Start From Object Tracking</div>
+                        <div className="text-sm text-gray-600">Skip to object detection for videos that are already short</div>
                       </button>
                     </div>
                   </div>
