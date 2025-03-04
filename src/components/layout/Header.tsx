@@ -20,6 +20,12 @@ const Header = () => {
               Home
             </Link>
             <Link 
+              to="/clips" 
+              className={`hover:text-blue-200 ${isActive('/clips') ? 'font-semibold border-b-2 border-white' : ''}`}
+            >
+              Clip Finder
+            </Link>
+            <Link 
               to="/editor" 
               className={`hover:text-blue-200 ${isActive('/editor') ? 'font-semibold border-b-2 border-white' : ''}`}
             >
