@@ -1,21 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { ClipSegment } from '../../services/ClipDetectionService';
 import { addSelectedClip, removeSelectedClip, setCurrentClip } from '../../store/slices/clipSlice';
 import Button from '../common/Button';
+import ClipPreview from './ClipPreview';
 
 interface ClipListProps {
   clips: ClipSegment[];
   selectedClips: ClipSegment[];
   onEditClip: (clipId: string) => void;
+  videoUrl: string;
 }
 
 const ClipList: React.FC<ClipListProps> = ({ 
   clips, 
   selectedClips,
-  onEditClip
+  onEditClip,
+  videoUrl
 }) => {
   const dispatch = useDispatch();
+  const [expandedClipId, setExpandedClipId] = useState<string | null>(null);
   
   // Check if a clip is selected
   const isSelected = (clipId: string): boolean => {
@@ -35,6 +39,15 @@ const ClipList: React.FC<ClipListProps> = ({
       dispatch(removeSelectedClip(clip.id));
     } else {
       dispatch(addSelectedClip(clip));
+    }
+  };
+
+  // Toggle clip expanded view
+  const toggleExpandedView = (clipId: string) => {
+    if (expandedClipId === clipId) {
+      setExpandedClipId(null);
+    } else {
+      setExpandedClipId(clipId);
     }
   };
   
@@ -58,6 +71,7 @@ const ClipList: React.FC<ClipListProps> = ({
             const duration = clip.endTime - clip.startTime;
             const selected = isSelected(clip.id);
             const clipName = clip.name || `Clip ${formatTime(clip.startTime)} - ${formatTime(clip.endTime)}`;
+            const isExpanded = expandedClipId === clip.id;
             
             return (
               <div 
@@ -67,7 +81,8 @@ const ClipList: React.FC<ClipListProps> = ({
                 <div className="flex items-start">
                   {/* Thumbnail */}
                   <div 
-                    className="w-24 h-16 bg-gray-200 flex-shrink-0 rounded overflow-hidden mr-3"
+                    className="w-24 h-16 bg-gray-200 flex-shrink-0 rounded overflow-hidden mr-3 cursor-pointer"
+                    onClick={() => toggleExpandedView(clip.id)}
                     style={{ 
                       backgroundImage: clip.thumbnail ? `url(${clip.thumbnail})` : undefined,
                       backgroundSize: 'cover',
@@ -107,16 +122,49 @@ const ClipList: React.FC<ClipListProps> = ({
                         <span className="ml-2">{formatTime(clip.endTime)}</span>
                       </div>
                       
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => onEditClip(clip.id)}
-                      >
-                        Edit
-                      </Button>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => toggleExpandedView(clip.id)}
+                        >
+                          {isExpanded ? 'Hide Preview' : 'Show Preview'}
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => onEditClip(clip.id)}
+                        >
+                          Edit
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
+
+                {/* Expanded preview area */}
+                {isExpanded && (
+                  <div className="mt-3 border-t pt-3">
+                    <div className="aspect-video">
+                      <ClipPreview
+                        videoUrl={videoUrl}
+                        clip={clip}
+                        controls={true}
+                        autoPlay={true}
+                        muted={true}
+                      />
+                    </div>
+                    <div className="mt-2 flex justify-end">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => onEditClip(clip.id)}
+                      >
+                        Edit This Clip
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
