@@ -13,6 +13,8 @@ const Home = () => {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showFallbackButton, setShowFallbackButton] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [showOptions, setShowOptions] = useState(false)
+  const [fileData, setFileData] = useState<{videoId: string, url: string, fileName: string} | null>(null)
   
   // After 3 seconds, show the fallback button in case the main button has issues
   useEffect(() => {
@@ -27,6 +29,7 @@ const Home = () => {
     // Reset any previous errors
     setUploadError(null)
     setIsUploading(true)
+    setShowOptions(false)
     
     console.log("File selected:", file.name, file.type) // Debug log
     
@@ -53,18 +56,19 @@ const Home = () => {
       }))
       console.log("Redux dispatch complete")
       
-      // Navigate to clips detection page instead of editor
-      console.log("Preparing to navigate to clips detection...")
-      window.setTimeout(() => {
-        console.log("Now navigating to clips detection...")
-        navigate('/clips')
-      }, 500) // Add a slight delay to ensure Redux state is updated
+      // Store file data for later use
+      setFileData({videoId, url, fileName: file.name})
+      
+      // Show options instead of auto-navigating
+      setShowOptions(true)
+      setIsUploading(false)
+      
     } catch (error) {
       console.error("Error handling file:", error)
       setUploadError('Failed to process the video file. Please try again.')
       setIsUploading(false)
     }
-  }, [dispatch, navigate])
+  }, [dispatch])
   
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -83,9 +87,20 @@ const Home = () => {
     }
   }, [])
   
-  const navigateToClips = () => {
-    navigate('/clips');
-  };
+  const navigateToPath = (path: string) => {
+    console.log(`Navigating to ${path}...`)
+    navigate(path)
+  }
+  
+  const handleDurationSelection = (isShortClip: boolean) => {
+    if (isShortClip) {
+      // If it's already a short clip (under 15 seconds), skip clip detection
+      navigateToPath('/editor')
+    } else {
+      // If it's longer content, go to clip detection first
+      navigateToPath('/clips')
+    }
+  }
   
   return (
     <div className="container mx-auto px-4 py-12">
@@ -93,7 +108,7 @@ const Home = () => {
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">Redbaez Reformatter</h1>
           <p className="text-xl text-gray-600 mb-8">
-            Transform 16:9 TV drama footage into perfect formats for Instagram, Facebook, TikTok and more
+            Find perfect clips from TV drama footage and transform them into ideal formats for social media
           </p>
           
           <div className="max-w-md mx-auto">
@@ -106,88 +121,137 @@ const Home = () => {
               onChange={handleFileUpload}
             />
             
-            {/* Primary Upload Button - Custom FileUploader component */}
-            <div className="mb-4">
-              <FileUploader
-                onFileSelected={handleFileSelect}
-                accept="video/*"
-                label="Upload Video"
-                className="mb-2"
-              />
-              <p className="text-sm text-gray-500">
-                Supported formats: MP4, MOV, WebM (max 1GB)
-              </p>
-            </div>
-            
-            {/* Original Button implementation as backup */}
-            <div className="hidden">
-              <Button 
-                id="upload-button"
-                variant="primary" 
-                size="lg" 
-                fullWidth
-                onClick={handleButtonClick}
-              >
-                Upload Video
-              </Button>
-            </div>
-            
-            {uploadError && (
-              <p className="text-red-500 mt-2">{uploadError}</p>
+            {!showOptions && (
+              <>
+                {/* Primary Upload Button - Custom FileUploader component */}
+                <div className="mb-4">
+                  <FileUploader
+                    onFileSelected={handleFileSelect}
+                    accept="video/*"
+                    label="Upload Video"
+                    className="mb-2"
+                  />
+                  <p className="text-sm text-gray-500">
+                    Supported formats: MP4, MOV, WebM (max 1GB)
+                  </p>
+                </div>
+                
+                {/* Original Button implementation as backup */}
+                <div className="hidden">
+                  <Button 
+                    id="upload-button"
+                    variant="primary" 
+                    size="lg" 
+                    fullWidth
+                    onClick={handleButtonClick}
+                  >
+                    Upload Video
+                  </Button>
+                </div>
+                
+                {uploadError && (
+                  <p className="text-red-500 mt-2">{uploadError}</p>
+                )}
+                
+                {isUploading && (
+                  <p className="text-gray-500 mt-2">Uploading...</p>
+                )}
+              </>
             )}
             
-            {isUploading && (
-              <p className="text-gray-500 mt-2">Uploading...</p>
+            {/* Show options after upload */}
+            {showOptions && fileData && (
+              <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+                <h2 className="text-xl font-semibold mb-4">Video Uploaded Successfully!</h2>
+                <p className="text-gray-600 mb-4">
+                  What would you like to do with "{fileData.fileName}"?
+                </p>
+                
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-medium mb-2">What type of video did you upload?</h3>
+                    <div className="grid grid-cols-1 gap-3">
+                      <button 
+                        onClick={() => handleDurationSelection(false)}
+                        className="bg-blue-50 border-2 border-blue-200 p-4 rounded-lg text-left hover:bg-blue-100 transition-colors"
+                      >
+                        <div className="font-medium">Longer content (TV show, trailer, etc.)</div>
+                        <div className="text-sm text-gray-600">I need to find and extract short clips first</div>
+                      </button>
+                      
+                      <button 
+                        onClick={() => handleDurationSelection(true)}
+                        className="bg-blue-50 border-2 border-blue-200 p-4 rounded-lg text-left hover:bg-blue-100 transition-colors"
+                      >
+                        <div className="font-medium">Short clip (already 15 seconds or less)</div>
+                        <div className="text-sm text-gray-600">Skip to reformatting for different aspect ratios</div>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="pt-3 flex justify-between border-t border-gray-200">
+                    <Button 
+                      variant="secondary"
+                      onClick={() => setShowOptions(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-3">Smart Focus Tracking</h2>
+          <div onClick={() => navigateToPath('/clips')} className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:bg-blue-50 transition-colors">
+            <h2 className="text-xl font-semibold mb-3">Step 1: Find Perfect Clips</h2>
             <p className="text-gray-600">
-              Identify important subjects in your 16:9 footage and automatically track them when reformatting to vertical or square formats.
+              Automatically detect and trim perfect 8-15 second clips from longer videos. Edit with frame-by-frame precision.
             </p>
+            <div className="mt-4 text-blue-600 font-medium">
+              Clip Finder
+            </div>
           </div>
           
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-3">Multi-Format Export</h2>
+          <div onClick={() => navigateToPath('/editor')} className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:bg-blue-50 transition-colors">
+            <h2 className="text-xl font-semibold mb-3">Step 2: Track Important Objects</h2>
             <p className="text-gray-600">
-              Export your videos in multiple aspect ratios simultaneously, including 9:16 for Stories/TikTok, 1:1 for feed posts, and 4:5 for Instagram.
+              Identify important subjects in your clips and set focus points for automatic tracking across different formats.
             </p>
+            <div className="mt-4 text-blue-600 font-medium">
+              Object Tracker
+            </div>
           </div>
           
-          <div onClick={navigateToClips} className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:bg-blue-50 transition-colors border-2 border-blue-200">
-            <h2 className="text-xl font-semibold mb-3">NEW! Clip Detection & Editing</h2>
+          <div onClick={() => navigateToPath('/export')} className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:bg-blue-50 transition-colors">
+            <h2 className="text-xl font-semibold mb-3">Step 3: Export for Social</h2>
             <p className="text-gray-600">
-              Automatically find and trim perfect clips from your source footage. Extract 8-15 second clips for social media with frame-perfect controls.
+              Generate videos in multiple formats simultaneously: 9:16 for Stories/TikTok, 1:1 for feed posts, and 4:5 for Instagram.
             </p>
-            <div className="mt-4 text-blue-600 font-medium flex items-center">
-              Try Now
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-1" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
+            <div className="mt-4 text-blue-600 font-medium">
+              Export Center
             </div>
           </div>
         </div>
         
         <div className="bg-blue-50 p-8 rounded-lg">
-          <h2 className="text-2xl font-semibold mb-4">How It Works</h2>
+          <h2 className="text-2xl font-semibold mb-4">Workflow Overview</h2>
           <ol className="list-decimal pl-5 space-y-3">
             <li className="text-gray-700">
-              <span className="font-medium">Upload your 16:9 video</span> - Start with your original landscape TV or film footage.
+              <span className="font-medium">Upload your video</span> - Start with your original TV or film footage (or upload pre-trimmed clips)
             </li>
             <li className="text-gray-700">
-              <span className="font-medium">Find perfect clips</span> - Use our automatic clip detection to identify coherent segments.
+              <span className="font-medium">Find perfect clips</span> - Use our automatic clip detection to identify coherent 8-15 second segments
             </li>
             <li className="text-gray-700">
-              <span className="font-medium">Mark focal points</span> - Identify speakers, actions, and important elements in your timeline.
+              <span className="font-medium">Trim with precision</span> - Use frame-by-frame controls to get the perfect in and out points
             </li>
             <li className="text-gray-700">
-              <span className="font-medium">Preview all formats</span> - See how your content will look across different platforms.
+              <span className="font-medium">Set focus points</span> - Identify speakers, actions, and important elements that should remain in frame
             </li>
             <li className="text-gray-700">
-              <span className="font-medium">Export</span> - Generate optimized videos for all your social media channels.
+              <span className="font-medium">Export for all platforms</span> - Generate videos in multiple aspect ratios ready for social media
             </li>
           </ol>
         </div>
