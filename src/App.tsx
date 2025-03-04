@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 import Editor from './pages/Editor'
 import Export from './pages/Export'
+import ClipDetection from './pages/ClipDetection'
 import Header from './components/layout/Header'
 import Footer from './components/layout/Footer'
 
@@ -14,6 +15,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/editor" element={<Editor />} />
           <Route path="/export" element={<Export />} />
+          <Route path="/clips" element={<ClipDetection />} />
         </Routes>
       </main>
       <Footer />
