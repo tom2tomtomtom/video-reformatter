@@ -83,6 +83,10 @@ const Home = () => {
     }
   }, [])
   
+  const navigateToClips = () => {
+    navigate('/clips');
+  };
+  
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-4xl mx-auto">
@@ -153,11 +157,17 @@ const Home = () => {
             </p>
           </div>
           
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-3">Preserve Narrative</h2>
+          <div onClick={navigateToClips} className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:bg-blue-50 transition-colors border-2 border-blue-200">
+            <h2 className="text-xl font-semibold mb-3">NEW! Clip Detection & Editing</h2>
             <p className="text-gray-600">
-              Maintain the narrative focus of your dramatic content by intelligently following speakers and key action in every scene.
+              Automatically find and trim perfect clips from your source footage. Extract 8-15 second clips for social media with frame-perfect controls.
             </p>
+            <div className="mt-4 text-blue-600 font-medium flex items-center">
+              Try Now
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </div>
           </div>
         </div>
         
@@ -166,6 +176,9 @@ const Home = () => {
           <ol className="list-decimal pl-5 space-y-3">
             <li className="text-gray-700">
               <span className="font-medium">Upload your 16:9 video</span> - Start with your original landscape TV or film footage.
+            </li>
+            <li className="text-gray-700">
+              <span className="font-medium">Find perfect clips</span> - Use our automatic clip detection to identify coherent segments.
             </li>
             <li className="text-gray-700">
               <span className="font-medium">Mark focal points</span> - Identify speakers, actions, and important elements in your timeline.
