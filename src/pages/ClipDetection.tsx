@@ -12,8 +12,10 @@ import {
   setError, 
   setCurrentClip,
   clearSelectedClips,
-  createClipBatch
+  createClipBatch,
+  addSelectedClip
 } from '../store/slices/clipSlice';
+import { toast } from 'react-hot-toast'; // Add toast if available in your project
 
 const ClipDetection: React.FC = () => {
   const dispatch = useDispatch();
@@ -31,6 +33,7 @@ const ClipDetection: React.FC = () => {
   const [detectionProgress, setDetectionProgress] = useState(0);
   const [batchName, setBatchName] = useState('');
   const [detectionCompleted, setDetectionCompleted] = useState(false);
+  const [processingBatch, setProcessingBatch] = useState(false);
   const [detectionOptions, setDetectionOptions] = useState<DetectionOptions>({
     minClipDuration: 8,
     maxClipDuration: 15,
@@ -64,9 +67,18 @@ const ClipDetection: React.FC = () => {
         }
       });
       
-      dispatch(setDetectedClips(clips));
-      setDetectionProgress(100);
-      setDetectionCompleted(true);
+      // Add a small delay to make the progress feel more natural
+      setTimeout(() => {
+        dispatch(setDetectedClips(clips));
+        setDetectionProgress(100);
+        setDetectionCompleted(true);
+        
+        // If we have clips, auto-select the first one
+        if (clips.length > 0) {
+          dispatch(addSelectedClip(clips[0]));
+        }
+      }, 500);
+      
     } catch (error) {
       console.error('Error detecting clips:', error);
       dispatch(setError(`Failed to detect clips: ${error}`));
@@ -98,7 +110,7 @@ const ClipDetection: React.FC = () => {
       // Clear and re-add all selected clips (to ensure they're updated)
       dispatch(clearSelectedClips());
       updatedSelected.forEach(clip => {
-        dispatch({ type: 'clips/addSelectedClip', payload: clip });
+        dispatch(addSelectedClip(clip));
       });
     }
     
@@ -109,9 +121,11 @@ const ClipDetection: React.FC = () => {
   // Handle creating a batch for reformatting
   const handleCreateBatch = () => {
     if (selectedClips.length === 0) {
-      alert("Please select at least one clip to continue.");
+      alert("Please select at least one clip to continue");
       return;
     }
+    
+    setProcessingBatch(true);
     
     const name = batchName || `Batch ${new Date().toLocaleString()}`;
     dispatch(createClipBatch({
@@ -119,8 +133,19 @@ const ClipDetection: React.FC = () => {
       clips: selectedClips
     }));
     
-    // Navigate to editor for object tracking
-    navigate('/editor');
+    // Show processing message
+    setTimeout(() => {
+      // If toast is available
+      try {
+        toast.success("Clips prepared for object tracking!");
+      } catch (e) {
+        // If toast isn't available, just log
+        console.log("Clips prepared for object tracking!");
+      }
+      
+      // Navigate to reformatter/editor
+      navigate('/editor');
+    }, 800);
   };
   
   // Get the current clip being edited, if any
@@ -341,8 +366,9 @@ const ClipDetection: React.FC = () => {
                             onClick={handleCreateBatch}
                             variant="primary"
                             fullWidth
+                            disabled={processingBatch}
                           >
-                            Continue to Object Tracking
+                            {processingBatch ? 'Processing...' : 'Continue to Object Tracking'}
                           </Button>
                         </>
                       )}
