@@ -114,17 +114,12 @@ const ClipDetection: React.FC = () => {
     }
     
     const name = batchName || `Batch ${new Date().toLocaleString()}`;
-    
-    // Create the batch in Redux
     dispatch(createClipBatch({
       name,
       clips: selectedClips
     }));
     
-    // Show confirmation and navigate
-    console.log(`Created batch with ${selectedClips.length} clips, navigating to editor...`);
-    
-    // Navigate to reformatter/editor
+    // Navigate to editor for object tracking
     navigate('/editor');
   };
   
