@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { Subject } from '../../services/VideoScannerService';
+import { Subject } from '../../services/ImprovedVideoScannerService';
 
 export interface VideoScanState {
   isScanning: boolean;
@@ -56,6 +56,7 @@ const videoScanSlice = createSlice({
         estimatedTimeRemaining: 0,
         percentComplete: 0
       };
+      // Clear previous data only when starting a new scan
       state.detectedSubjects = [];
       state.acceptedSubjectsIds = [];
       state.rejectedSubjectsIds = [];
@@ -111,9 +112,8 @@ const videoScanSlice = createSlice({
     },
     exitReviewMode: (state) => {
       state.isReviewMode = false;
-      state.detectedSubjects = [];
-      state.acceptedSubjectsIds = [];
-      state.rejectedSubjectsIds = [];
+      // Explicitly preserve all detection data
+      // Objects will persist until a new scan is started
     }
   }
 });

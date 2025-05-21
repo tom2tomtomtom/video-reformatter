@@ -10,9 +10,17 @@ interface AspectRatioPreviewProps {
 const AspectRatioPreview: React.FC<AspectRatioPreviewProps> = ({ ratio, width }) => {
   const { selectedPointId, points } = useSelector((state: RootState) => state.focusPoints)
   const { url } = useSelector((state: RootState) => state.video)
+  const { acceptedSubjectsIds } = useSelector((state: RootState) => state.videoScan)
   
+  // Get the selected point and its time range
   const selectedPoint = points.find(p => p.id === selectedPointId) || null
-  const hasScannedData = points.length > 0
+  
+  // Show previews if we have focus points or accepted subjects waiting to be finalized
+  const hasScannedData = points.length > 0 || acceptedSubjectsIds.length > 0
+  
+  // Extract time range from the selected point
+  const clipTimeStart = selectedPoint?.timeStart
+  const clipTimeEnd = selectedPoint?.timeEnd
   
   // Calculate height based on ratio
   const [ratioWidth, ratioHeight] = ratio.split(':').map(Number)
@@ -34,6 +42,8 @@ const AspectRatioPreview: React.FC<AspectRatioPreviewProps> = ({ ratio, width })
             width={width}
             manualFocusPoint={selectedPoint}
             letterboxEnabled={false}
+            clipTimeStart={clipTimeStart}
+            clipTimeEnd={clipTimeEnd}
           />
         ) : (
           <div className="flex flex-col items-center justify-center bg-gray-200 rounded"
@@ -59,6 +69,8 @@ const AspectRatioPreview: React.FC<AspectRatioPreviewProps> = ({ ratio, width })
             width={width}
             manualFocusPoint={selectedPoint}
             letterboxEnabled={true}
+            clipTimeStart={clipTimeStart}
+            clipTimeEnd={clipTimeEnd}
           />
         ) : (
           <div className="flex flex-col items-center justify-center bg-gray-200 rounded"

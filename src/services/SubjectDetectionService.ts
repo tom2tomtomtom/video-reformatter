@@ -22,93 +22,140 @@ class SubjectDetectionService {
   private model: any = null;
   private loading: boolean = false;
   private modelLoaded: boolean = false;
+  private lastError: Error | null = null;
+  private loadPromise: Promise<void> | null = null;
 
   /**
    * Initialize the detection service
    */
   async initialize(): Promise<void> {
+    console.log('Initializing subject detection service');
     return this.loadModel();
   }
 
   /**
-   * Load the model
+   * Load the model with improved error handling and caching
    */
   async loadModel(): Promise<void> {
-    if (this.modelLoaded) {
+    // If model is already loaded and valid, reuse it
+    if (this.modelLoaded && this.model) {
       console.log('Model already loaded, reusing existing model');
-      return; // Model already loaded
-    }
-
-    if (this.loading) {
-      console.log('Model is currently loading, waiting...');
-      // Wait for current loading process to complete
-      while (this.loading) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
       return;
     }
 
-    try {
-      this.loading = true;
-      console.log('Loading COCO-SSD model...');
-      
-      // Check if TensorFlow is available
-      if (!tf) {
-        console.error('TensorFlow is not defined! Check if @tensorflow/tfjs is installed correctly');
-        throw new Error('TensorFlow is not available');
+    // If already loading, return existing promise or create a new wait promise
+    if (this.loading) {
+      console.log('Model is currently loading, waiting for completion...');
+      if (this.loadPromise) {
+        return this.loadPromise;
       }
       
-      console.log('TensorFlow version:', tf.version);
-      console.log('TensorFlow backend:', tf.getBackend());
+      const startWaitTime = Date.now();
+      const maxWaitTime = 30000; // 30 seconds max wait
       
-      // Ensure WebGL backend is ready
-      if (tf.getBackend() !== 'webgl') {
-        console.log('Setting WebGL backend...');
-        try {
-          await tf.setBackend('webgl');
-          console.log('Successfully set WebGL backend');
-        } catch (err) {
-          console.error('Error setting WebGL backend:', err);
-          console.log('Falling back to CPU backend');
-        }
-      }
+      return new Promise<void>((resolve, reject) => {
+        const checkLoading = () => {
+          if (!this.loading) {
+            if (this.modelLoaded && this.model) {
+              resolve();
+            } else if (this.lastError) {
+              reject(this.lastError);
+            } else {
+              reject(new Error('Model failed to load for unknown reason'));
+            }
+            return;
+          }
+          
+          if (Date.now() - startWaitTime > maxWaitTime) {
+            reject(new Error('Timeout waiting for model to load'));
+            return;
+          }
+          
+          setTimeout(checkLoading, 100);
+        };
+        
+        checkLoading();
+      });
+    }
 
-      // Dynamically import the coco-ssd model
+    // Start a new loading process
+    this.loading = true;
+    this.lastError = null;
+    
+    // Create a promise for this loading instance and store it
+    this.loadPromise = (async () => {
       try {
+        console.log('Loading COCO-SSD model...');
+        
+        // Check if TensorFlow is available
+        if (!tf) {
+          const error = new Error('TensorFlow is not defined! Check if @tensorflow/tfjs is installed correctly');
+          console.error(error.message);
+          throw error;
+        }
+        
+        console.log('TensorFlow version:', tf.version);
+        console.log('TensorFlow backend:', tf.getBackend());
+        
+        // Ensure WebGL backend is ready for better performance
+        if (tf.getBackend() !== 'webgl') {
+          console.log('Setting WebGL backend...');
+          try {
+            await tf.setBackend('webgl');
+            await tf.ready(); // Wait for backend to be fully ready
+            console.log('Successfully set WebGL backend');
+          } catch (err) {
+            console.error('Error setting WebGL backend:', err);
+            console.log('Continuing with current backend:', tf.getBackend());
+          }
+        }
+
+        // Dynamically import the coco-ssd model
         console.log('Dynamically importing coco-ssd model...');
         const cocoSsd = await import('@tensorflow-models/coco-ssd');
-        console.log('coco-ssd import successful:', !!cocoSsd);
+        console.log('coco-ssd import successful');
         
-        // Load the model - this is optimized for browser use
+        // Load the model with a lighter configuration for better performance
         console.log('Loading model...');
-        this.model = await cocoSsd.load();
-        console.log('Model loading successful:', !!this.model);
-
+        this.model = await cocoSsd.load({
+          base: 'lite_mobilenet_v2' // Use lighter model variant
+        });
+        
+        if (!this.model) {
+          throw new Error('Model loaded but returned null/undefined');
+        }
+        
+        console.log('Model loading successful');
         this.modelLoaded = true;
         console.log('COCO-SSD model loaded successfully');
-      } catch (importError) {
-        console.error('Error importing coco-ssd model:', importError);
-        throw new Error(`Failed to import coco-ssd: ${importError.message}`);
+      } catch (error) {
+        console.error('Error loading COCO-SSD model:', error);
+        this.lastError = error instanceof Error ? error : new Error(String(error));
+        this.modelLoaded = false;
+        throw error;
+      } finally {
+        this.loading = false;
       }
-    } catch (error) {
-      console.error('Error loading COCO-SSD model:', error);
-      this.modelLoaded = false;
-      throw error;
-    } finally {
-      this.loading = false;
-    }
+    })();
+    
+    return this.loadPromise;
   }
 
   /**
    * Detect objects in the provided image
    */
   async detectObjects(image: HTMLImageElement | HTMLCanvasElement): Promise<DetectionResult> {
+    // Add timestamp for performance tracking
+    const startTime = performance.now();
     console.log('Starting object detection...');
     
-    if (!this.modelLoaded) {
+    if (!this.modelLoaded || !this.model) {
       try {
+        console.log('Model not loaded, loading now...');
         await this.loadModel();
+        console.log('Model loaded successfully for detection');
       } catch (error) {
+        console.error('Failed to load the object detection model:', error);
         return {
           objects: [],
           imageWidth: image.width,
@@ -118,7 +165,9 @@ class SubjectDetectionService {
       }
     }
 
+    // Double check model is available
     if (!this.model) {
+      console.error('Model still not available after loading attempt');
       return {
         objects: [],
         imageWidth: image.width,
@@ -131,30 +180,69 @@ class SubjectDetectionService {
     const imageHeight = image.height;
     console.log(`Detecting objects in image (${imageWidth}x${imageHeight})`);
     
-    let objects: DetectedObject[] = [];
-
-    try {
-      // Run inference - coco-ssd handles tensor conversion internally
-      const predictions = await this.model.detect(image);
-      console.log('Detection complete, found', predictions.length, 'objects');
-      
-      // Convert to our DetectedObject format
-      objects = predictions.map((pred: any, i: number) => {
-        // bbox is in format [x, y, width, height]
-        return {
-          id: `detection-${i}`,
-          bbox: pred.bbox as [number, number, number, number],
-          class: pred.class,
-          score: pred.score
-        };
-      });
-    } catch (error) {
-      console.error('Error during object detection:', error);
+    // Verify the image data is valid
+    if (imageWidth === 0 || imageHeight === 0) {
+      console.error('Invalid image dimensions for detection');
       return {
         objects: [],
         imageWidth,
         imageHeight,
-        error: 'Failed to perform object detection'
+        error: 'Invalid image dimensions'
+      };
+    }
+    
+    let objects: DetectedObject[] = [];
+
+    try {
+      // Use a timeout promise to prevent hanging
+      const detectionTimeout = 10000; // 10 seconds
+      
+      const detectionPromise = this.model.detect(image, 20); // Limit to 20 detections for performance
+      
+      // Create a race between detection and timeout
+      const predictions = await Promise.race([
+        detectionPromise,
+        new Promise<null>((_, reject) => {
+          setTimeout(() => reject(new Error('Detection timeout')), detectionTimeout);
+        })
+      ]);
+      
+      const detectionTime = Math.round(performance.now() - startTime);
+      console.log(`Detection complete in ${detectionTime}ms, found ${predictions?.length || 0} objects`);
+      
+      if (predictions && Array.isArray(predictions) && predictions.length > 0) {
+        // Convert to our DetectedObject format with unique IDs
+        objects = predictions.map((pred: any, i: number) => {
+          return {
+            id: `${pred.class}_${Date.now()}_${i}`,
+            bbox: pred.bbox as [number, number, number, number],
+            class: pred.class,
+            score: pred.score
+          };
+        });
+        
+        // Log detected objects for debugging
+        if (objects.length > 0) {
+          console.log(`Detected ${objects.length} objects:`);
+          objects.forEach(obj => {
+            console.log(`- ${obj.class} (${Math.round(obj.score * 100)}%)`);
+          });
+        }
+      } else {
+        console.log('No objects detected in this frame');
+      }
+    } catch (error) {
+      console.error('Error during object detection:', error);
+      
+      // If it's a timeout, provide a specific error message
+      const errorMsg = error.message?.includes('timeout') ? 
+        'Detection timed out' : 'Failed to perform object detection';
+      
+      return {
+        objects: [],
+        imageWidth,
+        imageHeight,
+        error: errorMsg
       };
     }
 

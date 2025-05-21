@@ -6,10 +6,17 @@ import DynamicVideoPreview from '../components/video/DynamicVideoPreview'
 import Button from '../components/common/Button'
 import { useState } from 'react'
 
+import { useLocation } from 'react-router-dom'
+
 const Export = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { url } = useSelector((state: RootState) => state.video)
-  
+  const { clipBatch } = useSelector((state: RootState) => state.clips)
+
+  // Try to get clips from navigation state, fallback to Redux
+  const clips = location.state?.clips || (clipBatch && clipBatch.length > 0 ? clipBatch[0].clips : [])
+
   if (!url) {
     return (
       <div className="container mx-auto px-4 py-12 text-center">
@@ -29,7 +36,7 @@ const Export = () => {
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div>
-            <VideoExporter />
+            <VideoExporter clips={clips} />
           </div>
           
           <div>
@@ -44,19 +51,19 @@ const Export = () => {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                   <div className="preview-container" style={{ width: '150px', aspectRatio: '9/16', overflow: 'hidden' }}>
-                    <DynamicVideoPreview ratio="9:16" width={150} height={267} letterboxEnabled={true} />
+                    <DynamicVideoPreview ratio="9:16" width={150} height={267} letterboxEnabled={true} clips={clips} />
                   </div>
                   <p className="text-xs text-center mt-1">9:16 Portrait</p>
                 </div>
                 <div>
                   <div className="preview-container" style={{ width: '150px', aspectRatio: '1/1', overflow: 'hidden' }}>
-                    <DynamicVideoPreview ratio="1:1" width={150} height={150} letterboxEnabled={true} />
+                    <DynamicVideoPreview ratio="1:1" width={150} height={150} letterboxEnabled={true} clips={clips} />
                   </div>
                   <p className="text-xs text-center mt-1">1:1 Square</p>
                 </div>
                 <div>
                   <div className="preview-container" style={{ width: '150px', aspectRatio: '4/5', overflow: 'hidden' }}>
-                    <DynamicVideoPreview ratio="4:5" width={150} height={188} letterboxEnabled={true} />
+                    <DynamicVideoPreview ratio="4:5" width={150} height={188} letterboxEnabled={true} clips={clips} />
                   </div>
                   <p className="text-xs text-center mt-1">4:5 Instagram</p>
                 </div>

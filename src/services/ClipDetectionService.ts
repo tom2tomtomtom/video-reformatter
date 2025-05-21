@@ -8,6 +8,7 @@ export interface ClipSegment {
   thumbnail?: string; // URL to thumbnail
   selected?: boolean;
   name?: string;
+  isEdited?: boolean; // Flag to indicate if clip has been saved after editing
 }
 
 export interface DetectionOptions {
@@ -214,12 +215,45 @@ class ClipDetectionService {
    * Generate thumbnails for each segment
    */
   private async generateThumbnails(segments: ClipSegment[], inputFilename: string): Promise<void> {
-    // We would normally extract actual thumbnails here, but for development/prototype,
-    // we'll just set a placeholder. In the real implementation, we'd use FFmpeg to extract
-    // frames from each segment.
-    segments.forEach(segment => {
-      segment.thumbnail = 'https://via.placeholder.com/320x180.png';
-    });
+    try {
+      // For each segment, extract a thumbnail at the middle of the clip
+      for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i];
+        const thumbnailTime = segment.startTime + ((segment.endTime - segment.startTime) / 2);
+        const thumbnailOutputName = `thumb-${segment.id}.jpg`;
+        
+        // Use FFmpeg to extract a frame at the specified time
+        await this.ffmpeg.run(
+          '-i', inputFilename,
+          '-ss', thumbnailTime.toString(),
+          '-frames:v', '1',
+          '-q:v', '2',
+          '-f', 'image2',
+          thumbnailOutputName
+        );
+        
+        // Read the thumbnail from FFmpeg's virtual filesystem
+        const thumbnailData = this.ffmpeg.FS('readFile', thumbnailOutputName);
+        
+        // Convert to base64 data URL
+        const thumbnailBlob = new Blob([thumbnailData.buffer], { type: 'image/jpeg' });
+        const thumbnailUrl = URL.createObjectURL(thumbnailBlob);
+        
+        // Set the thumbnail URL for the segment
+        segment.thumbnail = thumbnailUrl;
+        
+        // Clean up the file in FFmpeg's virtual filesystem
+        this.ffmpeg.FS('unlink', thumbnailOutputName);
+      }
+    } catch (error) {
+      console.error('Error generating thumbnails:', error);
+      // Fall back to placeholder thumbnails if extraction fails
+      segments.forEach(segment => {
+        if (!segment.thumbnail) {
+          segment.thumbnail = 'https://via.placeholder.com/320x180.png';
+        }
+      });
+    }
   }
 
   /**

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
+import { useLocation } from 'react-router-dom'
 import { RootState } from '../../store'
 import { setCurrentTime, setIsPlaying } from '../../store/slices/videoSlice'
 import { setSelectedPoint } from '../../store/slices/focusPointsSlice'
@@ -7,11 +8,32 @@ import Button from '../common/Button'
 
 const VideoTimeline = () => {
   const dispatch = useDispatch()
+  const location = useLocation()
   const { duration, currentTime, isPlaying } = useSelector((state: RootState) => state.video)
   const { points } = useSelector((state: RootState) => state.focusPoints)
+  const { clipBatch } = useSelector((state: RootState) => state.clips)
   
   const [isDragging, setIsDragging] = useState(false)
+  const [currentClip, setCurrentClip] = useState<any>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
+  
+  // Get batch ID from URL query parameters
+  const queryParams = new URLSearchParams(location.search)
+  const batchId = queryParams.get('batchId')
+  
+  // Find the current clip based on current time
+  useEffect(() => {
+    if (batchId && clipBatch && clipBatch.length > 0) {
+      const batch = clipBatch.find(batch => batch.id === batchId)
+      if (batch && batch.clips && batch.clips.length > 0) {
+        // Find the clip that contains the current time
+        const clip = batch.clips.find(
+          clip => currentTime >= clip.startTime && currentTime <= clip.endTime
+        )
+        setCurrentClip(clip)
+      }
+    }
+  }, [batchId, clipBatch, currentTime])
 
   const formatTime = (timeInSeconds: number) => {
     const minutes = Math.floor(timeInSeconds / 60)
@@ -96,6 +118,17 @@ const VideoTimeline = () => {
         className="h-8 bg-gray-200 rounded-md cursor-pointer relative"
         onClick={handleTimelineClick}
       >
+        {/* Current clip highlight if in batch view */}
+        {currentClip && (
+          <div 
+            className="absolute top-0 h-full bg-green-100"
+            style={{
+              left: `${(currentClip.startTime / duration) * 100}%`,
+              width: `${((currentClip.endTime - currentClip.startTime) / duration) * 100}%`
+            }}
+          />
+        )}
+        
         {/* Timeline progress */}
         <div 
           className="absolute top-0 left-0 h-full bg-blue-500 rounded-l-md"
@@ -112,6 +145,22 @@ const VideoTimeline = () => {
           />
         ))}
         
+        {/* Clip start/end markers if in batch view */}
+        {currentClip && (
+          <>
+            <div 
+              className="absolute top-0 h-full w-1 bg-green-600"
+              style={{ left: `${(currentClip.startTime / duration) * 100}%` }}
+              title={`Clip Start: ${formatTime(currentClip.startTime)}`}
+            />
+            <div 
+              className="absolute top-0 h-full w-1 bg-green-600"
+              style={{ left: `${(currentClip.endTime / duration) * 100}%` }}
+              title={`Clip End: ${formatTime(currentClip.endTime)}`}
+            />
+          </>
+        )}
+        
         {/* Current time cursor */}
         <div 
           className="absolute top-0 w-1 h-full bg-white border-l border-r border-gray-400 cursor-ew-resize"
@@ -123,6 +172,13 @@ const VideoTimeline = () => {
       {currentFocusPoint && (
         <div className="mt-2 text-xs bg-yellow-100 p-2 rounded">
           Current focus: {currentFocusPoint.description}
+        </div>
+      )}
+      
+      {currentClip && (
+        <div className="mt-2 text-xs bg-green-100 p-2 rounded flex justify-between">
+          <span>Current clip: {currentClip.name || `Clip ${currentClip.id}`}</span>
+          <span>Time range: {formatTime(currentClip.startTime)} - {formatTime(currentClip.endTime)}</span>
         </div>
       )}
     </div>

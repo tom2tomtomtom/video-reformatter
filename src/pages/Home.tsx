@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useDispatch } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { setVideoMetadata } from '../store/slices/videoSlice'
+import { RootState } from '../store'
+import { setVideoMetadata, resetVideo } from '../store/slices/videoSlice'
+import { setDetectedClips } from '../store/slices/clipSlice'
 import Button from '../components/common/Button'
 import FileUploader from '../components/common/FileUploader'
 import { storeVideo } from '../utils/videoStorage'
@@ -9,6 +11,7 @@ import { storeVideo } from '../utils/videoStorage'
 const Home = () => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
+  const { url: existingVideoUrl } = useSelector((state: RootState) => state.video)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showFallbackButton, setShowFallbackButton] = useState(false)
@@ -23,6 +26,14 @@ const Home = () => {
     }, 3000)
     
     return () => clearTimeout(timer)
+  }, [])
+  
+  // On component mount, if we're returning to the home page with an existing video,
+  // show the upload options immediately
+  useEffect(() => {
+    if (existingVideoUrl) {
+      setShowOptions(true)
+    }
   }, [])
   
   const handleFileSelect = useCallback(async (file: File) => {
@@ -41,6 +52,11 @@ const Home = () => {
     }
     
     try {
+      // Clear any previous state when uploading a new video
+      // This ensures we have a clean state for the newly uploaded video
+      dispatch(resetVideo())
+      dispatch(setDetectedClips([]))
+      
       // Store the video file in IndexedDB for persistence
       console.log("About to store video in IndexedDB...")
       const { videoId, url } = await storeVideo(file)
@@ -59,7 +75,7 @@ const Home = () => {
       // Store file data for later use
       setFileData({videoId, url, fileName: file.name})
       
-      // Show options instead of auto-navigating
+      // ALWAYS show options after upload, whether it's a new upload or re-upload
       setShowOptions(true)
       setIsUploading(false)
       

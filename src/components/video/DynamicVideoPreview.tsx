@@ -13,6 +13,8 @@ interface DynamicVideoPreviewProps {
     y: number
   }
   letterboxEnabled?: boolean
+  clipTimeStart?: number
+  clipTimeEnd?: number
 }
 
 /**
@@ -24,6 +26,8 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
   width,
   manualFocusPoint,
   letterboxEnabled = true,
+  clipTimeStart,
+  clipTimeEnd,
 }) => {
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -76,20 +80,45 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
   
   // Update active focus point when current time changes
   useEffect(() => {
+    // If we have a manual focus point, always use that instead of time-based focus points
+    if (manualFocusPoint) {
+      console.log(`[${ratio}] Using manual focus point:`, manualFocusPoint);
+      return;
+    }
+    
+    // Find the focus point for the current time
     const activePoint = points.find(
-      (point) => currentTime >= point.timeStart && currentTime <= point.timeEnd
-    ) || null
+      (point) => {
+        // Check if current time is within this focus point's time range
+        const isWithinTimeRange = currentTime >= point.timeStart && currentTime <= point.timeEnd;
+        
+        // If we have a clip time start/end, also verify the point is within clip boundaries
+        if (clipTimeStart !== undefined && clipTimeEnd !== undefined) {
+          const isWithinClipBounds = 
+            point.timeStart <= clipTimeEnd && 
+            point.timeEnd >= clipTimeStart;
+          return isWithinTimeRange && isWithinClipBounds;
+        }
+        
+        return isWithinTimeRange;
+      }
+    ) || null;
     
     if (activePoint) {
       console.log(`[${ratio}] Active focus point at ${currentTime}s:`, activePoint.description);
+    } else if (points.length > 0 && videoRef.current && !videoRef.current.paused) {
+      // If we're playing but don't have an active point, log this for debugging
+      console.log(`[${ratio}] No active focus point at time ${currentTime}s (out of ${points.length} points)`);
     }
     
-    setActiveFocusPoint(activePoint)
-  }, [currentTime, points, ratio])
+    setActiveFocusPoint(activePoint);
+  }, [currentTime, points, ratio, manualFocusPoint, clipTimeStart, clipTimeEnd])
   
   // Reset video when URL changes
   useEffect(() => {
-    console.log(`[${ratio}] URL changed, resetting video state`);
+    console.log(`[${ratio}] URL changed to: ${url}`);
+    console.log(`[${ratio}] Current points:`, points);
+    console.log(`[${ratio}] Manual focus point:`, manualFocusPoint);
     
     // Reset video state
     setIsVideoReady(false);
@@ -158,13 +187,22 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
   // Calculate crop styles based on focus point
   const getCropStyles = () => {
     // Get the focus point to use (explicit prop or from store)
-    const focusToUse = manualFocusPoint || (activeFocusPoint ? {
+    const rawFocusPoint = manualFocusPoint || (activeFocusPoint ? {
       x: activeFocusPoint.x,
       y: activeFocusPoint.y
     } : { x: 0.5, y: 0.5 }); // Default to center
     
+    // Ensure focus point is normalized (0-1 range)
+    // We need to handle both cases: already normalized or pixel values
+    const focusToUse = {
+      // If x is > 1, it's probably in pixels, so normalize it
+      x: rawFocusPoint.x > 1 ? rawFocusPoint.x / videoWidth : rawFocusPoint.x,
+      y: rawFocusPoint.y > 1 ? rawFocusPoint.y / videoHeight : rawFocusPoint.y
+    };
+    
     // Add debug logging for export troubleshooting
-    console.log(`[${ratio}] Focus point: x=${focusToUse.x}, y=${focusToUse.y}`);
+    console.log(`[${ratio}] Raw focus point:`, rawFocusPoint);
+    console.log(`[${ratio}] Normalized focus point: x=${focusToUse.x}, y=${focusToUse.y}`);
     console.log(`[${ratio}] Source dimensions: ${videoWidth}x${videoHeight}, ratio=${videoWidth/videoHeight}`);
     console.log(`[${ratio}] Target ratio: ${targetRatio}`);
     
@@ -274,8 +312,20 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
     }
   };
   
+  // Set a unique key based on URL to prevent unnecessary reloads
+  const videoKey = url || 'no-video';
+  
+  // Track if we've already loaded this URL to prevent unnecessary reloads
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  
   // Set up video element and event listeners
   useEffect(() => {
+    // Skip reloading if it's the same video URL already loaded correctly
+    if (url === loadedUrl && isVideoReady && !isLoading) {
+      console.log(`[${ratio}] Skipping reload of already loaded video:`, url);
+      return;
+    }
+    
     if (!videoRef.current) {
       console.log(`[${ratio}] Video ref not available`);
       return;
@@ -295,15 +345,61 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
     setIsVideoReady(false);
     setIsPlaying(false);
     
+    // Add timeouts to prevent infinite loading
+    let primaryTimeoutId: number | null = null;
+    let failsafeTimeoutId: number | null = null;
+    
+    // Primary timeout - most videos should load within 1 second
+    primaryTimeoutId = window.setTimeout(() => {
+      if (!isMounted) return;
+      
+      if (!isVideoReady) {
+        console.log(`[${ratio}] Primary timeout: forcing video ready state`);
+        
+        // Try to ensure the video is at the correct time
+        try {
+          if (clipTimeStart !== undefined) {
+            videoElement.currentTime = clipTimeStart;
+          }
+        } catch (err) {
+          console.error(`[${ratio}] Error in timeout currentTime set:`, err);
+        }
+        
+        // Force the ready state
+        setIsVideoReady(true);
+        setIsLoading(false);
+        setLoadedUrl(url); // Mark this URL as loaded
+      }
+    }, 1000);
+    
+    // Failsafe timeout - absolute maximum wait time (3 seconds)
+    failsafeTimeoutId = window.setTimeout(() => {
+      if (!isMounted) return;
+      
+      if (!isVideoReady) {
+        console.log(`[${ratio}] Failsafe timeout: forcing video ready state`);
+        setIsVideoReady(true);
+        setIsLoading(false);
+        setLoadedUrl(url); // Mark this URL as loaded
+      }
+    }, 3000);
+    
     // Create one-time event handlers that clean up after themselves
     const handleCanPlay = () => {
       if (!isMounted) return;
       
       console.log(`[${ratio}] Video can play! (one-time event)`);
       
-      // Reset to beginning
+      // Set to clip start time if provided, otherwise reset to beginning
       try {
-        videoElement.currentTime = 0;
+        // Ensure the clip starts at the right time
+        if (clipTimeStart !== undefined) {
+          videoElement.currentTime = clipTimeStart;
+          console.log(`[${ratio}] Set video currentTime to clip start:`, clipTimeStart);
+        } else {
+          videoElement.currentTime = 0;
+          console.log(`[${ratio}] No clip start time, set to beginning`);
+        }
       } catch (err) {
         console.error(`[${ratio}] Error setting currentTime:`, err);
       }
@@ -318,9 +414,34 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
       // Update state
       setIsVideoReady(true);
       setIsLoading(false);
+      setCanPlayFired(true);
+      setLoadedUrl(url); // Mark this URL as loaded
+      
+      // Clear timeouts as we don't need them anymore
+      if (primaryTimeoutId) window.clearTimeout(primaryTimeoutId);
+      if (failsafeTimeoutId) window.clearTimeout(failsafeTimeoutId);
       
       // Remove this listener immediately to prevent loops
       videoElement.removeEventListener('canplay', handleCanPlay);
+    };
+    
+    // Additional event to help with loading detection
+    const handleLoadedData = () => {
+      if (!isMounted) return;
+      console.log(`[${ratio}] loadeddata event fired`);
+      
+      // Ensure clip time is set correctly
+      if (clipTimeStart !== undefined) {
+        try {
+          // Double-check position again
+          if (Math.abs(videoElement.currentTime - clipTimeStart) > 0.1) {
+            console.log(`[${ratio}] Correcting time in loadeddata handler: ${videoElement.currentTime} -> ${clipTimeStart}`);
+            videoElement.currentTime = clipTimeStart;
+          }
+        } catch (err) {
+          console.error(`[${ratio}] Error in loadeddata currentTime set:`, err);
+        }
+      }
     };
     
     const handleLoad = () => {
@@ -366,6 +487,10 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
         }, 500);
       } else {
         console.error(`[${ratio}] Failed to load video after ${loadAttempts} attempts`);
+        // Even on error, eventually show something rather than loading wheel
+        setIsVideoReady(true);
+        setIsLoading(false);
+        
         try {
           // Try to recover from storage as last resort
           recoverVideo(videoId).then(recoveredUrl => {
@@ -383,29 +508,49 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
       }
     };
     
-    // Add minimal event listeners
+    // Add event listeners
     videoElement.addEventListener('canplay', handleCanPlay);
+    videoElement.addEventListener('loadeddata', handleLoadedData);
     videoElement.addEventListener('load', handleLoad);
     videoElement.addEventListener('error', handleError);
     videoElement.addEventListener('play', handlePlay);
     videoElement.addEventListener('pause', handlePause);
     videoElement.addEventListener('ended', handleEnded);
     
-    // Set source and load the video
-    console.log(`[${ratio}] Setting video src:`, url);
-    try {
-      videoElement.crossOrigin = "anonymous";
-      videoElement.src = url;
-      videoElement.currentTime = 0; // Always start from beginning
-      videoElement.load();
-    } catch (err) {
-      console.error(`[${ratio}] Error setting video source:`, err);
+    // Set source and load the video only if we need to
+    if (url !== loadedUrl || !isVideoReady) {
+      console.log(`[${ratio}] Setting video src:`, url);
+      try {
+        videoElement.crossOrigin = "anonymous";
+        videoElement.src = url;
+        videoElement.currentTime = clipTimeStart || 0; // Start at clip time
+        videoElement.load();
+      } catch (err) {
+        console.error(`[${ratio}] Error setting video source:`, err);
+      }
+    } else {
+      console.log(`[${ratio}] Reusing existing video, adjusting position to:`, clipTimeStart);
+      try {
+        // Just update the position without reloading
+        if (clipTimeStart !== undefined) {
+          videoElement.currentTime = clipTimeStart;
+        }
+      } catch (err) {
+        console.error(`[${ratio}] Error adjusting position:`, err);
+      }
     }
     
     // Clean up
     return () => {
       isMounted = false;
+      
+      // Clear all timeouts
+      if (primaryTimeoutId) window.clearTimeout(primaryTimeoutId);
+      if (failsafeTimeoutId) window.clearTimeout(failsafeTimeoutId);
+      
+      // Remove all event listeners
       videoElement.removeEventListener('canplay', handleCanPlay);
+      videoElement.removeEventListener('loadeddata', handleLoadedData);
       videoElement.removeEventListener('load', handleLoad);
       videoElement.removeEventListener('error', handleError);
       videoElement.removeEventListener('play', handlePlay);
@@ -418,7 +563,93 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
         videoElement.load();
       }
     };
-  }, [url, ratio, videoId, loadAttempts, currentTime]);
+  }, [url, ratio, videoId, loadAttempts, currentTime, isVideoReady, loadedUrl, clipTimeStart, clipTimeEnd]);
+  
+  // Use requestAnimationFrame for more efficient time boundary enforcement
+  useEffect(() => {
+    // Skip if no video or no clip time boundaries
+    if (!videoRef.current || !clipTimeStart) return;
+    
+    console.log(`[${ratio}] Setting up clip boundaries: ${clipTimeStart} to ${clipTimeEnd}`);
+    
+    // Use requestAnimationFrame for smoother update cycle
+    let animationFrameId: number;
+    let lastUpdate = 0;
+    
+    // More efficient time update handler using rAF
+    const checkTimeInRaf = (timestamp: number) => {
+      const video = videoRef.current;
+      if (!video) return;
+      
+      // Only check every 50ms instead of every frame for more responsive boundaries
+      if (timestamp - lastUpdate > 50 && !video.paused) {
+        lastUpdate = timestamp;
+        
+        // Throttle Redux updates to avoid excessive dispatches
+        const shouldUpdateRedux = Math.abs(video.currentTime - currentTime) > 0.1;
+        
+        // Update the Redux store with the current time for proper focus point tracking
+        // This ensures focus points update at the proper rate during playback
+        if (shouldUpdateRedux) {
+          store.dispatch({
+            type: 'video/setCurrentTime',
+            payload: video.currentTime
+          });
+        }
+        
+        // If we've gone past the end of the clip, loop back to start
+        if (clipTimeEnd && video.currentTime >= clipTimeEnd) {
+          console.log(`[${ratio}] Reached clip end at ${video.currentTime}, resetting to ${clipTimeStart}`);
+          
+          // Pause first for more reliable seeking
+          video.pause();
+          
+          // Schedule restart with small delay for smoother transition
+          setTimeout(() => {
+            if (videoRef.current) {
+              // Ensure we reset to the precise clip start
+              videoRef.current.currentTime = clipTimeStart || 0;
+              
+              // Also update the Redux store to match
+              store.dispatch({
+                type: 'video/setCurrentTime',
+                payload: clipTimeStart || 0
+              });
+              
+              // Resume playback
+              videoRef.current.play().catch(err => 
+                console.warn(`[${ratio}] Loop play failed:`, err));
+            }
+          }, 50);
+        }
+        
+        // If time is before clip start, set to clip start
+        if (clipTimeStart !== undefined && video.currentTime < clipTimeStart) {
+          console.log(`[${ratio}] Before clip start, setting to ${clipTimeStart}`);
+          video.currentTime = clipTimeStart;
+          
+          // Also update Redux
+          store.dispatch({
+            type: 'video/setCurrentTime',
+            payload: clipTimeStart
+          });
+        }
+      }
+      
+      // Continue the animation loop
+      animationFrameId = requestAnimationFrame(checkTimeInRaf);
+    };
+    
+    // Start the animation frame loop
+    animationFrameId = requestAnimationFrame(checkTimeInRaf);
+    
+    // Clean up
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [ratio, clipTimeStart, clipTimeEnd, isVideoReady]);
   
   // Handle play/pause
   const togglePlayPause = () => {
@@ -435,9 +666,10 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
       } else {
         console.log(`[${ratio}] Playing video`);
         
-        // Always reset to beginning when starting playback
+        // Set to clip start time if provided, otherwise reset to beginning
         try {
-          videoRef.current.currentTime = 0;
+          videoRef.current.currentTime = clipTimeStart || 0;
+          console.log(`[${ratio}] Playing from time:`, videoRef.current.currentTime);
         } catch (err) {
           console.error(`[${ratio}] Error setting currentTime:`, err);
         }
@@ -456,7 +688,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
               const userInteractionPlay = () => {
                 if (videoRef.current) {
                   try {
-                    videoRef.current.currentTime = 0; // Reset time again for retry
+                    videoRef.current.currentTime = clipTimeStart || 0; // Reset time to clip start
                   } catch (innerErr) {
                     console.error(`[${ratio}] Error setting currentTime on retry:`, innerErr);
                   }
@@ -538,22 +770,34 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
             >
               {/* Inside this square, we place our video */}
               <video
+                key={videoKey} // Add key to prevent unnecessary reloads
                 ref={videoRef}
                 className={`${isVideoReady ? '' : 'hidden'}`}
                 style={{
                   width: '100%',
                   height: '100%',
                   objectFit: 'cover',
-                  objectPosition: 
-                    manualFocusPoint 
-                      ? `${manualFocusPoint.x * 100}% ${manualFocusPoint.y * 100}%` 
-                      : activeFocusPoint
-                      ? `${activeFocusPoint.x * 100}% ${activeFocusPoint.y * 100}%`
-                      : '50% 50%',
+                  objectPosition: (() => {
+                    // Get the focus point
+                    const rawFocus = manualFocusPoint || activeFocusPoint || { x: 0.5, y: 0.5 };
+                    
+                    // Normalize if needed
+                    const x = rawFocus.x > 1 ? (rawFocus.x / videoWidth) * 100 : rawFocus.x * 100;
+                    const y = rawFocus.y > 1 ? (rawFocus.y / videoHeight) * 100 : rawFocus.y * 100;
+                    
+                    // Make sure x and y are within reasonable bounds (0-100%)
+                    const safeX = Math.max(0, Math.min(100, x));
+                    const safeY = Math.max(0, Math.min(100, y));
+                    
+                    return `${safeX}% ${safeY}%`;
+                  })(),
                 }}
-                preload="metadata"
+                preload="auto"
                 muted
                 playsInline
+                autoPlay={false}
+                loop
+                controls={false}
               />
             </div>
           ) : (
@@ -567,17 +811,21 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
               }}
             >
               <video
+                key={videoKey} // Add key to prevent unnecessary reloads
                 ref={videoRef}
                 className={`${isVideoReady ? '' : 'hidden'}`}
                 style={getCropStyles()}
-                preload="metadata"
+                preload="auto"
                 muted
                 playsInline
+                autoPlay={false}
+                loop
+                controls={false}
               />
             </div>
           )}
           
-          {isLoading && !isVideoReady && (
+          {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
             </div>

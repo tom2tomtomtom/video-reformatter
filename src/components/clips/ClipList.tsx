@@ -47,7 +47,18 @@ const ClipList: React.FC<ClipListProps> = ({
     if (expandedClipId === clipId) {
       setExpandedClipId(null);
     } else {
-      setExpandedClipId(clipId);
+      // Close any previously expanded clip first
+      setExpandedClipId(null);
+      
+      // Check if we're dealing with a blob URL
+      const isBlobUrl = videoUrl.startsWith('blob:');
+      
+      // Use a slightly longer delay for blob URLs to ensure better resource handling
+      // This helps avoid resource contention when blob URLs need more processing time
+      setTimeout(() => {
+        console.log(`Opening preview for clip ${clipId}${isBlobUrl ? ' (blob URL)' : ''}`);
+        setExpandedClipId(clipId);
+      }, isBlobUrl ? 300 : 100);
     }
   };
   
@@ -101,7 +112,14 @@ const ClipList: React.FC<ClipListProps> = ({
                   <div className="flex-grow">
                     <div className="flex items-start justify-between">
                       <div>
-                        <h3 className="font-medium">{clipName}</h3>
+                        <div className="flex items-center">
+                          <h3 className="font-medium">{clipName}</h3>
+                          {clip.isEdited && (
+                            <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
+                              Saved
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-500">
                           Duration: {formatTime(duration)} ({duration.toFixed(1)}s)
                         </p>
@@ -147,12 +165,14 @@ const ClipList: React.FC<ClipListProps> = ({
                   <div className="mt-3 border-t pt-3">
                     <div className="aspect-video">
                       <ClipPreview
-                        videoUrl={videoUrl}
-                        clip={clip}
-                        controls={true}
-                        autoPlay={true}
-                        muted={true}
-                      />
+  videoUrl={videoUrl}
+  clip={clip}
+  controls={true}
+  autoPlay={true}
+  muted={true}
+  loop={false}
+  showFocusPoints={true}
+/>
                     </div>
                     <div className="mt-2 flex justify-end">
                       <Button

@@ -17,6 +17,15 @@ When adapting 16:9 TV drama content for social media platforms, simply cropping 
 - **Upload 16:9 video content** - Work with standard TV/film footage
 - **Define focus points throughout the video timeline** - Mark speakers and important elements
 - **Auto-format videos for multiple platforms:**
+
+## 🔄 Recent Updates
+
+### Improved Video Scanning (March 2025)
+
+- **Enhanced Video Scanning Engine** - Completely rebuilt the video scanning functionality to ensure reliable playback and consistent subject detection
+- **Improved Video Initialization** - Fixed critical issues where videos would play without visuals
+- **Optimized Subject Detection** - Improved the detection accuracy and reliability with better error handling
+- **More Robust UI** - Simplified the scanning interface with clearer user feedback during the scanning process
   - 9:16 (TikTok, Instagram/Facebook Stories)
   - 1:1 (Instagram/Facebook Feed)
   - 4:5 (Instagram Feed optimal)

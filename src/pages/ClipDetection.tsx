@@ -16,13 +16,16 @@ import {
   addSelectedClip
 } from '../store/slices/clipSlice';
 
+// Local placeholder image for demo clips
+const LOCAL_PLACEHOLDER = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAADIAQMAAACBzG6DAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAADFJREFUeJztwTEBAAAAwqD1T20ND6AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4G8uQAABGlogfAAAAABJRU5ErkJggg==';
+
 // Simulated clip data for demonstrating the UI
 const DEMO_CLIPS: ClipSegment[] = [
   {
     id: 'clip-1',
     startTime: 13.5,
     endTime: 26.8,
-    thumbnail: 'https://via.placeholder.com/320x180.png',
+    thumbnail: LOCAL_PLACEHOLDER,
     selected: false,
     name: 'Character Entrance'
   },
@@ -30,7 +33,7 @@ const DEMO_CLIPS: ClipSegment[] = [
     id: 'clip-2',
     startTime: 42.7,
     endTime: 56.2,
-    thumbnail: 'https://via.placeholder.com/320x180.png',
+    thumbnail: LOCAL_PLACEHOLDER,
     selected: false,
     name: 'Dialogue Scene'
   },
@@ -38,7 +41,7 @@ const DEMO_CLIPS: ClipSegment[] = [
     id: 'clip-3',
     startTime: 72.3,
     endTime: 85.9,
-    thumbnail: 'https://via.placeholder.com/320x180.png',
+    thumbnail: LOCAL_PLACEHOLDER,
     selected: false,
     name: 'Action Moment'
   },
@@ -46,7 +49,7 @@ const DEMO_CLIPS: ClipSegment[] = [
     id: 'clip-4',
     startTime: 103.1,
     endTime: 116.4,
-    thumbnail: 'https://via.placeholder.com/320x180.png',
+    thumbnail: LOCAL_PLACEHOLDER,
     selected: false,
     name: 'Reveal Scene'
   }
@@ -84,7 +87,19 @@ const ClipDetection: React.FC = () => {
       // We need to go back to the upload page
       navigate('/');
     }
-  }, [url, navigate]);
+    
+    // Reset detection state when entering the page
+    // This ensures we don't automatically start detection
+    if (detectedClips.length > 0) {
+      // Don't clear clips if they've already been detected
+      // This allows the user to see their detected clips after returning
+      // from another page
+    } else {
+      // Reset progress and completion status
+      setDetectionProgress(0);
+      setDetectionCompleted(false);
+    }
+  }, [url, navigate, detectedClips.length]);
   
   // Handle starting the clip detection process
   const handleDetectClips = async () => {
@@ -185,6 +200,26 @@ const ClipDetection: React.FC = () => {
       });
     }
     
+    // Show temporary saved message
+    const savedMessage = document.createElement('div');
+    savedMessage.className = 'fixed top-4 right-4 bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 rounded shadow-lg z-50 animate-fade-in';
+    savedMessage.innerHTML = `
+      <div class="flex items-center">
+        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+        </svg>
+        <p>Clip "${updatedClip.name}" saved successfully!</p>
+      </div>
+    `;
+    document.body.appendChild(savedMessage);
+    
+    // Remove the message after 2 seconds
+    setTimeout(() => {
+      if (savedMessage.parentNode) {
+        savedMessage.parentNode.removeChild(savedMessage);
+      }
+    }, 2000);
+    
     // Clear current clip
     dispatch(setCurrentClip(null));
   };
@@ -196,18 +231,49 @@ const ClipDetection: React.FC = () => {
       return;
     }
     
+    // Check if any selected clips haven't been edited
+    const uneditedClips = selectedClips.filter(clip => !clip.isEdited);
+    if (uneditedClips.length > 0 && uneditedClips.length < selectedClips.length) {
+      if (!confirm(`${uneditedClips.length} clip(s) haven't been saved after editing. Continue anyway?`)) {
+        return;
+      }
+    }
+    
     setProcessingBatch(true);
     
     const name = batchName || `Batch ${new Date().toLocaleString()}`;
+    const batchId = `batch-${Date.now()}`;
+    
+    // Create the batch in Redux
     dispatch(createClipBatch({
+      id: batchId,
       name,
       clips: selectedClips
     }));
     
-    // Show processing message
+    // Show success message
+    const successMessage = document.createElement('div');
+    successMessage.className = 'fixed top-4 right-4 bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded shadow-lg z-50 animate-fade-in';
+    successMessage.innerHTML = `
+      <div class="flex items-center">
+        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+        </svg>
+        <p><strong>Success!</strong> Batch "${name}" created with ${selectedClips.length} clips.</p>
+      </div>
+    `;
+    document.body.appendChild(successMessage);
+    
+    // Remove the success message after 3 seconds
     setTimeout(() => {
-      // Navigate to reformatter/editor
-      navigate('/editor');
+      if (successMessage.parentNode) {
+        successMessage.parentNode.removeChild(successMessage);
+      }
+    }, 3000);
+    
+    // Navigate to reformatter/editor with the batch ID
+    setTimeout(() => {
+      navigate(`/editor?batchId=${batchId}`);
     }, 800);
   };
   
@@ -230,7 +296,10 @@ const ClipDetection: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Clip Finder & Editor</h1>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold">Clip Finder</h1>
+          <p className="text-gray-600 text-sm mt-1">Step 2: Find key moments in your video to create clips</p>
+        </div>
         
         {/* Show clip editor if a clip is selected, otherwise show main interface */}
         {currentClip ? (
@@ -433,8 +502,8 @@ const ClipDetection: React.FC = () => {
                           
                           <div className="bg-yellow-50 p-3 rounded-md mb-4">
                             <p className="text-sm text-yellow-700">
-                              <span className="font-medium">Next Step:</span> Send these clips to the object tracking
-                              stage where you'll identify important subjects in each clip for optimal reformatting.
+                              <span className="font-medium">Next Step:</span> Send these clips to the Object Detector
+                              stage where you'll trim clips and detect objects for optimal reformatting.
                             </p>
                           </div>
                           
@@ -444,7 +513,7 @@ const ClipDetection: React.FC = () => {
                             fullWidth
                             disabled={processingBatch}
                           >
-                            {processingBatch ? 'Processing...' : 'Continue to Object Tracking'}
+                            {processingBatch ? 'Processing...' : 'Continue to Object Detector'}
                           </Button>
                         </>
                       )}

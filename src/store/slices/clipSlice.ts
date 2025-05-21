@@ -86,11 +86,12 @@ const clipSlice = createSlice({
       state.isPlaying = action.payload;
     },
     createClipBatch: (state, action: PayloadAction<{
+      id?: string;
       name: string;
       clips: ClipSegment[];
     }>) => {
       const newBatch = {
-        id: `batch-${Date.now()}`,
+        id: action.payload.id || `batch-${Date.now()}`,
         clips: action.payload.clips,
         name: action.payload.name,
         created: new Date().toISOString()

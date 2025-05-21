@@ -1,4 +1,5 @@
 import subjectDetectionService, { DetectedObject } from './SubjectDetectionService';
+import { ClipSegment } from './ClipDetectionService';
 
 export interface ScanProgress {
   currentFrame: number;
@@ -27,6 +28,7 @@ export interface ScanOptions {
   minDetections?: number; // Minimum number of times an object must be detected to be included (default: 2)
   onProgress?: (progress: ScanProgress) => void; // Progress callback
   onFrameProcessed?: (frameTime: number, objects: DetectedObject[]) => void; // Optional callback for each processed frame
+  clipSegments?: ClipSegment[]; // Optional array of clip segments to scan instead of the entire video
 }
 
 const DEFAULT_OPTIONS: ScanOptions = {
@@ -47,6 +49,11 @@ class VideoScannerService {
    * Initialize scanner with video element
    */
   public initialize(videoElement: HTMLVideoElement): void {
+    if (!videoElement) {
+      console.error('Invalid video element provided to scanner');
+      throw new Error('Invalid video element provided to scanner');
+    }
+    
     console.log('Initializing video scanner with element:', videoElement);
     this.video = videoElement;
     
@@ -66,6 +73,9 @@ class VideoScannerService {
     
     this.isScanning = false;
     this.shouldStop = false;
+    
+    // Ensure canvas dimensions match video
+    this.updateCanvasDimensions();
   }
 
   /**
@@ -79,11 +89,86 @@ class VideoScannerService {
    * Stop an ongoing scan
    */
   public stopScan(): void {
+    console.log('Stopping ongoing video scan');
     this.shouldStop = true;
+    this.isScanning = false;
+  }
+  
+  /**
+   * Check if the video is ready and wait until it is
+   */
+  private async checkReady(): Promise<void> {
+    if (!this.video) {
+      throw new Error('No video element available');
+    }
+    
+    // Wait for video to be ready with timeout protection
+    if (this.video.readyState < 2) { // HAVE_CURRENT_DATA = 2
+      console.log('Video not ready yet. Current readyState:', this.video.readyState);
+      console.log('Waiting for video to be ready...');
+      
+      const maxWaitTime = 20000; // 20 seconds max wait
+      const startTime = Date.now();
+      
+      return new Promise<void>((resolve, reject) => {
+        const checkReady = () => {
+          // Check if we've exceeded the max wait time
+          if (Date.now() - startTime > maxWaitTime) {
+            console.error('Timeout waiting for video to be ready');
+            console.error('Final video state:', {
+              readyState: this.video.readyState,
+              paused: this.video.paused,
+              currentTime: this.video.currentTime,
+              duration: this.video.duration,
+              networkState: this.video.networkState,
+              videoWidth: this.video.videoWidth,
+              videoHeight: this.video.videoHeight
+            });
+            reject(new Error('Timeout waiting for video to be ready - please try pausing and restarting the video'));
+            return;
+          }
+          
+          if (!this.video) {
+            reject(new Error('Video element became unavailable while waiting'));
+            return;
+          }
+          
+          if (this.video.readyState >= 2) {
+            console.log('Video is now ready. readyState:', this.video.readyState, 'Duration:', this.video.duration);
+            resolve();
+          } else {
+            // Try to nudge the video to load
+            if (this.video.paused) {
+              // Sometimes playing and immediately pausing can help
+              try {
+                const playPromise = this.video.play();
+                if (playPromise !== undefined) {
+                  playPromise.then(() => {
+                    this.video?.pause();
+                  }).catch(err => {
+                    console.log('Play attempt failed:', err);
+                  });
+                }
+              } catch (e) {
+                console.log('Error trying to nudge video loading:', e);
+              }
+            }
+            
+            console.log('Video still not ready. readyState:', this.video.readyState, 'Duration:', this.video.duration);
+            setTimeout(checkReady, 100);
+          }
+        };
+        
+        checkReady();
+      });
+    } else {
+      console.log('Video already ready. readyState:', this.video.readyState);
+      return Promise.resolve();
+    }
   }
 
   /**
-   * Scan video for subjects/objects
+   * Scan the entire video for subjects
    */
   public async scanVideo(
     videoDuration: number,
@@ -91,134 +176,142 @@ class VideoScannerService {
   ): Promise<Subject[]> {
     console.log('Starting video scan with duration:', videoDuration, 'and options:', options);
     
-    if (!this.video) {
-      const error = 'Video element not initialized. Call initialize() first.';
-      console.error(error);
-      throw new Error(error);
-    }
-
-    if (!this.ctx || !this.canvas) {
-      const error = 'Canvas context not initialized.';
-      console.error(error);
-      throw new Error(error);
+    if (!this.video || !this.canvas || !this.ctx) {
+      throw new Error('Scanner not initialized. Call initialize() first.');
     }
 
     if (this.isScanning) {
-      const error = 'Already scanning. Stop current scan first.';
-      console.error(error);
-      throw new Error(error);
+      console.warn('A scan is already in progress.');
+      this.stopScan();
+      // Give a little time for cleanup
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    // Check if video is actually loaded
-    if (this.video.readyState < 2) { // HAVE_CURRENT_DATA = 2
-      console.log('Video not ready yet. Current readyState:', this.video.readyState);
-      console.log('Waiting for video to be ready...');
-      await new Promise<void>((resolve) => {
-        const checkReady = () => {
-          if (this.video && this.video.readyState >= 2) {
-            console.log('Video is now ready. readyState:', this.video.readyState);
-            resolve();
-          } else {
-            console.log('Video still not ready. readyState:', this.video?.readyState);
-            setTimeout(checkReady, 100);
-          }
-        };
-        checkReady();
-      });
-    }
-
+    // Check if video is actually loaded and wait for it to be ready
+    await this.checkReady();
+    
     // Merge default and provided options
-    const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
-    
-    // Initialize tracking
-    this.isScanning = true;
-    this.shouldStop = false;
-    
-    const { interval, minScore, minDetections, onProgress, onFrameProcessed } = mergedOptions;
-    
-    // Initialize object tracking
-    const subjects: Subject[] = [];
+    const opts = { ...DEFAULT_OPTIONS, ...options };
     
     try {
-      // Make sure subject detection service is initialized
+      this.isScanning = true;
+      this.shouldStop = false;
+      
+      // Load model first to avoid delay during scanning
       await subjectDetectionService.loadModel();
-    
-      // Update canvas dimensions to match video
-      this.updateCanvasDimensions();
       
-      // Start time tracking
-      const startTime = Date.now();
+      // Calculate total frames to process based on interval
+      const interval = opts.interval || 1;
       
-      // Calculate total frames to process
-      const totalFrames = Math.ceil(videoDuration / interval);
-      let processedFrames = 0;
-      
-      // Process video at specified intervals
-      for (let time = 0; time < videoDuration && !this.shouldStop; time += interval) {
-        // Update progress
-        const currentTime = Date.now();
-        const elapsedTime = (currentTime - startTime) / 1000;
-        const framesPerSecond = processedFrames / elapsedTime || 0;
-        const remainingFrames = totalFrames - processedFrames;
-        const estimatedTimeRemaining = framesPerSecond > 0 
-          ? remainingFrames / framesPerSecond 
-          : 0;
-        
-        // Create progress object
-        const progress: ScanProgress = {
-          currentFrame: processedFrames,
-          totalFrames,
-          elapsedTime,
-          estimatedTimeRemaining,
-          percentComplete: (processedFrames / totalFrames) * 100
-        };
-        
-        // Call progress callback if provided
-        if (onProgress) {
-          onProgress(progress);
-        }
-        
-        // Seek to the current time
-        this.video.currentTime = time;
-        
-        // Wait for the video to update its frame
-        await new Promise<void>((resolve) => {
-          const seekHandler = () => {
-            this.video!.removeEventListener('seeked', seekHandler);
-            resolve();
-          };
-          this.video!.addEventListener('seeked', seekHandler);
+      // Generate time points to process (either from clips or entire video)
+      const timePoints: number[] = [];
+      if (opts.clipSegments && opts.clipSegments.length > 0) {
+        // For each clip segment, add time points at the specified interval
+        opts.clipSegments.forEach(clip => {
+          for (let t = clip.startTime; t <= clip.endTime; t += interval) {
+            timePoints.push(t);
+          }
         });
-        
-        // Capture frame
-        this.ctx!.drawImage(this.video!, 0, 0, this.canvas!.width, this.canvas!.height);
-        
-        // Detect objects in the current frame
-        const detectionResult = await subjectDetectionService.detectObjects(this.canvas!);
-        console.log(`Frame at ${time}s: detected ${detectionResult.objects.length} objects`);
-        
-        // Filter objects based on min score
-        const filteredObjects = detectionResult.objects.filter(obj => obj.score >= minScore);
-        
-        // Call frame processed callback if provided
-        if (onFrameProcessed) {
-          onFrameProcessed(time, filteredObjects);
+        console.log(`Generated ${timePoints.length} time points from ${opts.clipSegments.length} clip segments`);
+      } else {
+        // Process the entire video at the specified interval
+        for (let t = 0; t < videoDuration; t += interval) {
+          timePoints.push(t);
         }
-        
-        // Track objects across frames
-        this.trackSubjects(subjects, filteredObjects, time, mergedOptions.similarityThreshold);
-        
-        // Increment processed frames counter
-        processedFrames++;
+        console.log(`Generated ${timePoints.length} time points from full video`);
       }
       
-      // Filter subjects based on minimum detection count
-      const finalSubjects = subjects.filter(subject => 
-        subject.positions.length >= minDetections
+      const totalFrames = timePoints.length;
+      
+      // Track subjects across frames - using a Map for better lookup performance
+      const subjects: Map<string, Subject> = new Map();
+      
+      // Start time for progress calculation
+      const startTime = performance.now();
+      
+      // Process video at each interval
+      for (let frameIndex = 0; frameIndex < timePoints.length; frameIndex++) {
+        if (this.shouldStop) {
+          console.log('Scan interrupted by user');
+          break;
+        }
+        
+        // Get current timestamp
+        const currentTime = timePoints[frameIndex];
+        
+        // Update progress
+        if (opts.onProgress) {
+          const elapsedTime = (performance.now() - startTime) / 1000;
+          const framesPerSecond = frameIndex / Math.max(0.001, elapsedTime);
+          const estimatedTimeRemaining = (totalFrames - frameIndex) / Math.max(0.001, framesPerSecond);
+          
+          opts.onProgress({
+            currentFrame: frameIndex + 1,
+            totalFrames,
+            elapsedTime,
+            estimatedTimeRemaining,
+            percentComplete: ((frameIndex + 1) / totalFrames) * 100
+          });
+        }
+        
+        // Seek to time and extract frame
+        try {
+          // Seek to the current time
+          this.video.currentTime = currentTime;
+          
+          // Wait for the video to seek to the specified time
+          await Promise.race([
+            new Promise<void>((resolve) => {
+              const onSeeked = () => {
+                this.video!.removeEventListener('seeked', onSeeked);
+                resolve();
+              };
+              this.video!.addEventListener('seeked', onSeeked);
+            }),
+            new Promise<void>((_, reject) => {
+              setTimeout(() => reject(new Error('Seek timeout')), 5000);
+            })
+          ]).catch(err => {
+            console.warn(`Seeking to ${currentTime}s timed out, continuing anyway`, err);
+          });
+          
+          // Update canvas dimensions if needed
+          if (this.canvas.width !== this.video.videoWidth || this.canvas.height !== this.video.videoHeight) {
+            this.canvas.width = this.video.videoWidth;
+            this.canvas.height = this.video.videoHeight;
+          }
+          
+          // Capture the frame
+          this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+          
+          // Run object detection on the frame
+          const detectionResult = await subjectDetectionService.detectObjects(this.canvas);
+          
+          // Filter objects based on minimum score
+          const validObjects = detectionResult.objects.filter(
+            obj => obj.score >= (opts.minScore || 0.5)
+          );
+          
+          // Optional callback for each processed frame
+          if (opts.onFrameProcessed) {
+            opts.onFrameProcessed(currentTime, validObjects);
+          }
+          
+          // Track subjects across frames
+          this.addOrUpdateSubjects(subjects, validObjects, currentTime, opts.similarityThreshold || 0.6);
+        } catch (error) {
+          console.error(`Error processing frame at ${currentTime}s:`, error);
+          // Continue with next frame even if there's an error
+        }
+      }
+      
+      // Convert Map to array and filter out subjects with insufficient detections
+      const result = Array.from(subjects.values()).filter(
+        subject => subject.positions.length >= (opts.minDetections || 2)
       );
       
-      console.log(`Scan complete: found ${finalSubjects.length} subjects across ${processedFrames} frames`);
-      return finalSubjects;
+      console.log(`Scan complete: found ${result.length} subjects`);
+      return result;
     } finally {
       this.isScanning = false;
     }
@@ -227,6 +320,36 @@ class VideoScannerService {
   /**
    * Update canvas dimensions to match the current state of the video
    */
+  /**
+   * Calculate Intersection over Union (IoU) between two bounding boxes
+   * Used to determine if two detections are the same object
+   */
+  private calculateIoU(
+    boxA: [number, number, number, number],
+    boxB: [number, number, number, number]
+  ): number {
+    // Extract coordinates
+    const [xA, yA, widthA, heightA] = boxA;
+    const [xB, yB, widthB, heightB] = boxB;
+    
+    // Calculate boxes with absolute coordinates (x1, y1, x2, y2)
+    const boxAabs = [xA, yA, xA + widthA, yA + heightA];
+    const boxBabs = [xB, yB, xB + widthB, yB + heightB];
+    
+    // Calculate intersection area
+    const xOverlap = Math.max(0, Math.min(boxAabs[2], boxBabs[2]) - Math.max(boxAabs[0], boxBabs[0]));
+    const yOverlap = Math.max(0, Math.min(boxAabs[3], boxBabs[3]) - Math.max(boxAabs[1], boxBabs[1]));
+    const intersectionArea = xOverlap * yOverlap;
+    
+    // Calculate union area
+    const boxAarea = widthA * heightA;
+    const boxBarea = widthB * heightB;
+    const unionArea = boxAarea + boxBarea - intersectionArea;
+    
+    // Return IoU (intersection over union)
+    return unionArea > 0 ? intersectionArea / unionArea : 0;
+  }
+  
   private updateCanvasDimensions(): void {
     if (!this.video || !this.canvas) {
       console.error('Cannot update canvas dimensions - video or canvas not initialized');
@@ -256,6 +379,137 @@ class VideoScannerService {
   /**
    * Track subjects across video frames
    */
+  /**
+   * Simplified subject tracking that's more reliable
+   */
+  private simplifiedTrackSubjects(
+    subjects: Subject[],
+    detectedObjects: DetectedObject[],
+    currentTime: number,
+    similarityThreshold: number = 0.5
+  ): void {
+    // Process each newly detected object
+    for (const obj of detectedObjects) {
+      // Convert to expected format
+      const bbox: [number, number, number, number] = [
+        obj.bbox[0],
+        obj.bbox[1],
+        obj.bbox[2],
+        obj.bbox[3]
+      ];
+      
+      // Try to match with existing subjects
+      let matched = false;
+      
+      // Check for matches with existing subjects of the same class
+      for (const subject of subjects.filter(s => s.class === obj.class)) {
+        // Get the last known position of this subject
+        const lastPosition = subject.positions[subject.positions.length - 1];
+        
+        // Calculate IoU (Intersection over Union) to measure similarity
+        const iou = this.calculateIoU(bbox, lastPosition.bbox);
+        
+        // If IoU is above threshold, consider it the same subject
+        if (iou >= similarityThreshold) {
+          // Update the subject
+          subject.lastSeen = currentTime;
+          subject.positions.push({
+            time: currentTime,
+            bbox,
+            score: obj.score
+          });
+          
+          matched = true;
+          break;
+        }
+      }
+      
+      // If no match was found, create a new subject
+      if (!matched) {
+        const newSubject: Subject = {
+          id: `${obj.class}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          class: obj.class,
+          firstSeen: currentTime,
+          lastSeen: currentTime,
+          positions: [{
+            time: currentTime,
+            bbox,
+            score: obj.score
+          }]
+        };
+        
+        subjects.push(newSubject);
+      }
+    }
+  }
+
+  /**
+   * Add or update subjects in the Map based on detected objects
+   */
+  private addOrUpdateSubjects(
+    subjectsMap: Map<string, Subject>,
+    detectedObjects: DetectedObject[],
+    currentTime: number,
+    similarityThreshold: number
+  ): void {
+    // Convert map to array for matching
+    const existingSubjects = Array.from(subjectsMap.values());
+    
+    // Process each detected object
+    for (const obj of detectedObjects) {
+      const bbox = obj.bbox;
+      
+      // Try to match with existing subjects of the same class
+      let matched = false;
+      let matchedSubject: Subject | null = null;
+      
+      for (const subject of existingSubjects.filter(s => s.class === obj.class)) {
+        // Get the last position
+        const lastPosition = subject.positions[subject.positions.length - 1];
+        
+        // Calculate IoU to determine if it's the same object
+        const iou = this.calculateIoU(bbox, lastPosition.bbox);
+        
+        if (iou >= similarityThreshold) {
+          // It's a match - update the existing subject
+          matchedSubject = subject;
+          matched = true;
+          break;
+        }
+      }
+      
+      if (matched && matchedSubject) {
+        // Update existing subject
+        matchedSubject.lastSeen = currentTime;
+        matchedSubject.positions.push({
+          time: currentTime,
+          bbox: bbox,
+          score: obj.score
+        });
+        
+        // Update in the map
+        subjectsMap.set(matchedSubject.id, matchedSubject);
+      } else {
+        // Create a new subject
+        const id = `${obj.class}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        const newSubject: Subject = {
+          id: id,
+          class: obj.class,
+          firstSeen: currentTime,
+          lastSeen: currentTime,
+          positions: [{
+            time: currentTime,
+            bbox: bbox,
+            score: obj.score
+          }]
+        };
+        
+        // Add to the map
+        subjectsMap.set(id, newSubject);
+      }
+    }
+  }
+
   private trackSubjects(
     subjects: Subject[],
     detectedObjects: DetectedObject[],
@@ -320,81 +574,71 @@ class VideoScannerService {
     }
   }
   
-  /**
-   * Calculate Intersection over Union (IoU) between two bounding boxes
-   * Each bounding box is [x, y, width, height]
-   */
-  private calculateIoU(
-    bbox1: [number, number, number, number],
-    bbox2: [number, number, number, number]
-  ): number {
-    // Convert from [x, y, width, height] to [x1, y1, x2, y2]
-    const box1 = {
-      x1: bbox1[0],
-      y1: bbox1[1],
-      x2: bbox1[0] + bbox1[2],
-      y2: bbox1[1] + bbox1[3]
-    };
-    
-    const box2 = {
-      x1: bbox2[0],
-      y1: bbox2[1],
-      x2: bbox2[0] + bbox2[2],
-      y2: bbox2[1] + bbox2[3]
-    };
-    
-    // Calculate intersection area
-    const intersectionX1 = Math.max(box1.x1, box2.x1);
-    const intersectionY1 = Math.max(box1.y1, box2.y1);
-    const intersectionX2 = Math.min(box1.x2, box2.x2);
-    const intersectionY2 = Math.min(box1.y2, box2.y2);
-    
-    if (intersectionX2 < intersectionX1 || intersectionY2 < intersectionY1) {
-      return 0; // No intersection
-    }
-    
-    const intersectionArea = 
-      (intersectionX2 - intersectionX1) * (intersectionY2 - intersectionY1);
-    
-    // Calculate union area
-    const box1Area = (box1.x2 - box1.x1) * (box1.y2 - box1.y1);
-    const box2Area = (box2.x2 - box2.x1) * (box2.y2 - box2.y1);
-    const unionArea = box1Area + box2Area - intersectionArea;
-    
-    return intersectionArea / unionArea;
-  }
+  // simplifiedTrackSubjects method exists above - removed duplicate method
+  
+  // calculateIoU method exists above - removed duplicate method
   
   /**
-   * Convert detected subjects to focus points
+   * Convert tracked subjects to focus points
    */
-  public subjectsToFocusPoints(subjects: Subject[]): any[] {
+  public convertSubjectsToFocusPoints(
+    subjects: Subject[],
+    imageWidth: number,
+    imageHeight: number
+  ): Array<{
+    id: string;
+    timeStart: number;
+    timeEnd: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    description: string;
+  }> {
     return subjects.map(subject => {
-      // Calculate average position
-      const positions = subject.positions;
-      const sumX = positions.reduce((sum, pos) => sum + pos.bbox[0] + pos.bbox[2]/2, 0);
-      const sumY = positions.reduce((sum, pos) => sum + pos.bbox[1] + pos.bbox[3]/2, 0);
-      const avgX = sumX / positions.length;
-      const avgY = sumY / positions.length;
+      // Calculate average position of all detections
+      const avgBbox = this.calculateAverageBoundingBox(subject.positions.map(pos => pos.bbox));
+      const [x, y, width, height] = avgBbox;
       
-      // Calculate average dimensions
-      const sumWidth = positions.reduce((sum, pos) => sum + pos.bbox[2], 0);
-      const sumHeight = positions.reduce((sum, pos) => sum + pos.bbox[3], 0);
-      const avgWidth = sumWidth / positions.length;
-      const avgHeight = sumHeight / positions.length;
+      // Calculate average confidence score
+      const avgConfidence = subject.positions.reduce((sum, pos) => sum + pos.score, 0) / subject.positions.length;
       
-      // Create focus point
+      // Number of frames the subject appeared in
+      const detectionCount = subject.positions.length;
+      
       return {
-        id: subject.id,
+        id: `focus-${Date.now()}-${subject.id}`,
         timeStart: subject.firstSeen,
         timeEnd: subject.lastSeen,
-        x: avgX,
-        y: avgY,
-        width: avgWidth,
-        height: avgHeight,
-        description: subject.class
+        x: (x / imageWidth) * 100,
+        y: (y / imageHeight) * 100,
+        width: (width / imageWidth) * 100,
+        height: (height / imageHeight) * 100,
+        description: `${subject.class} (${Math.round(avgConfidence * 100)}% confidence, ${detectionCount} detections)`
       };
     });
   }
+
+  /**
+   * Calculate the average bounding box from multiple detections
+   */
+  private calculateAverageBoundingBox(
+    bboxes: Array<[number, number, number, number]>
+  ): [number, number, number, number] {
+    const sumX = bboxes.reduce((sum, bbox) => sum + bbox[0], 0);
+    const sumY = bboxes.reduce((sum, bbox) => sum + bbox[1], 0);
+    const sumWidth = bboxes.reduce((sum, bbox) => sum + bbox[2], 0);
+    const sumHeight = bboxes.reduce((sum, bbox) => sum + bbox[3], 0);
+    
+    return [
+      sumX / bboxes.length,
+      sumY / bboxes.length,
+      sumWidth / bboxes.length,
+      sumHeight / bboxes.length
+    ];
+  }
 }
 
-export default VideoScannerService;
+// Create an instance of the service and export it
+const videoScannerService = new VideoScannerService();
+export default videoScannerService;

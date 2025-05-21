@@ -28,20 +28,144 @@ const ClipEditor: React.FC<ClipEditorProps> = ({
   const playheadPosition = useSelector((state: RootState) => state.clips.playheadPosition);
   const isPlaying = useSelector((state: RootState) => state.clips.isPlaying);
   
+  // Initialize component with props
+  useEffect(() => {
+    // Check if URL is valid - either http/https or blob URL
+    const isValidUrl = Boolean(videoUrl) && (
+      videoUrl.startsWith('http') || 
+      videoUrl.startsWith('blob:') ||
+      videoUrl.startsWith('data:')
+    );
+    
+    // If URL is invalid, show error
+    if (!videoUrl || !isValidUrl) {
+      setVideoError(true);
+      setErrorMessage('Invalid video URL provided');
+    }
+  }, [videoUrl, currentClip]);
+  
   // Set initial playhead position to clip start time
   useEffect(() => {
+    // Set initial playhead position for the current clip
     dispatch(setPlayheadPosition(currentClip.startTime));
     if (videoRef.current) {
       videoRef.current.currentTime = currentClip.startTime;
     }
   }, [currentClip.id]);
   
-  // Handle metadata loaded - set video duration
+  // Add state for video errors and loading state
+  const [videoError, setVideoError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
+  
+  // Handle video errors
+  const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
+    console.error('Video loading error:', e);
+    setVideoError(true);
+    
+    const video = e.currentTarget;
+    let errorText = 'Unknown error';
+    
+    // Diagnose the specific error
+    switch(video.error?.code) {
+      case 1: errorText = 'MEDIA_ERR_ABORTED: Fetching process aborted by user'; break;
+      case 2: errorText = 'MEDIA_ERR_NETWORK: Network error while loading'; break;
+      case 3: errorText = 'MEDIA_ERR_DECODE: Media decoding error'; break;
+      case 4: errorText = 'MEDIA_ERR_SRC_NOT_SUPPORTED: Format not supported'; break;
+    }
+    
+    setErrorMessage(errorText);
+    console.error('Video error code:', video.error?.code, errorText);
+    console.error('Video URL:', videoUrl);
+  };
+  
+  // Apply optimizations to video element
+  const applyVideoOptimizations = (video: HTMLVideoElement) => {
+    // Apply hardware acceleration for smoother playback
+    video.style.transform = 'translateZ(0)';
+    video.style.backfaceVisibility = 'hidden';
+    
+    // Set additional attributes for better performance
+    video.setAttribute('disablePictureInPicture', '');
+    video.preload = 'auto';
+  };
+  
+  // Enhanced metadata handler with video frame rate detection and optimization settings
   const handleMetadataLoaded = () => {
-    if (videoRef.current) {
-      setVideoDuration(videoRef.current.duration);
+    if (!videoRef.current) return;
+    
+    const video = videoRef.current;
+    
+    // Clear any previous errors since we successfully loaded metadata
+    setVideoError(false);
+    setErrorMessage('');
+    setIsVideoLoaded(true);
+    
+    setVideoDuration(video.duration);
+    
+    // Apply optimizations immediately when metadata is loaded
+    applyVideoOptimizations(video);
+    
+    // Detect the native frame rate of the video based on common standards
+    let detectedFrameRate = 30; // Default assumption
+    
+    // Try to determine the correct frame rate based on video properties
+    // This is a heuristic approach since HTML5 video doesn't expose the native frame rate
+    if (video.videoHeight) {
+      if (video.videoHeight === 1080 || video.videoHeight === 2160) { // HD/4K content
+        if (video.videoWidth / video.videoHeight > 2) { // Wider aspect ratios typical of film
+          detectedFrameRate = 24; // Film standard
+        } else {
+          detectedFrameRate = 30; // Standard HD/4K
+        }
+      } else if (video.videoHeight === 720) { // HD 720p
+        detectedFrameRate = 30; // Typical for 720p
+      } else if (video.videoHeight === 576) { // SD PAL
+        detectedFrameRate = 25; // PAL standard
+      } else if (video.videoHeight === 480) { // SD NTSC
+        detectedFrameRate = 30; // NTSC standard (29.97)
+      }
+    }
+    
+    // Update the frame rate for stepping through frames
+    setPerfStats(prev => ({
+      ...prev,
+      nativeFrameRate: detectedFrameRate
+    }));
+    
+    // Video metadata loaded successfully
+    
+    // Force initial seek to start time for better playback reliability
+    try {
+      setTimeout(() => {
+        if (video && video.readyState >= 1) {
+          video.currentTime = currentClip.startTime;
+          dispatch(setPlayheadPosition(currentClip.startTime));
+        }
+      }, 50);
+    } catch (e) {
+      console.warn('Could not set initial time:', e);
     }
   };
+  
+  // Effect to ensure video loads properly
+  useEffect(() => {
+    if (!videoRef.current) return;
+    
+    const video = videoRef.current;
+    video.load();
+    
+    // Safety timeout to ensure video loads
+    const timeout = setTimeout(() => {
+      if (!isVideoLoaded && video) {
+        console.warn('Video load timeout - forcing metadata refresh');
+        setIsVideoLoaded(true);
+        handleMetadataLoaded();
+      }
+    }, 2000);
+    
+    return () => clearTimeout(timeout);
+  }, [videoUrl]);
   
   // Handle seeking in the timeline
   const handleSeek = (time: number) => {
@@ -68,16 +192,18 @@ const ClipEditor: React.FC<ClipEditorProps> = ({
           
         case 'ArrowLeft': // Left arrow - step backward one frame
           e.preventDefault();
-          // Assuming 30fps for frame stepping
-          const prevFrame = Math.max(0, videoRef.current.currentTime - 1/30);
+          // Use detected frame rate for frame stepping
+          const frameStep = 1 / perfStats.nativeFrameRate;
+          const prevFrame = Math.max(0, videoRef.current.currentTime - frameStep);
           videoRef.current.currentTime = prevFrame;
           dispatch(setPlayheadPosition(prevFrame));
           break;
           
         case 'ArrowRight': // Right arrow - step forward one frame
           e.preventDefault();
-          // Assuming 30fps for frame stepping
-          const nextFrame = Math.min(videoDuration, videoRef.current.currentTime + 1/30);
+          // Use detected frame rate for frame stepping
+          const nextFrameStep = 1 / perfStats.nativeFrameRate;
+          const nextFrame = Math.min(videoDuration, videoRef.current.currentTime + nextFrameStep);
           videoRef.current.currentTime = nextFrame;
           dispatch(setPlayheadPosition(nextFrame));
           break;
@@ -115,49 +241,165 @@ const ClipEditor: React.FC<ClipEditorProps> = ({
     };
   }, [currentClip, isPlaying, videoDuration]);
   
-  // Sync video with playhead
-  useEffect(() => {
-    if (videoRef.current && videoRef.current.currentTime !== playheadPosition) {
-      videoRef.current.currentTime = playheadPosition;
-    }
-  }, [playheadPosition]);
+  // DISABLED: Video-playhead sync loop
+  // This was causing bidirectional updates and forcing 60fps renders
+  // The loop worked like this: 
+  // 1. RAF loop updates Redux with video.currentTime
+  // 2. This hook sees Redux changed and updates video.currentTime
+  // 3. This causes the video element to re-render at 60fps
+  // This is unnecessary since ClipPreview doesn't do this at all
+  // useEffect(() => {
+  //   if (videoRef.current && videoRef.current.currentTime !== playheadPosition) {
+  //     videoRef.current.currentTime = playheadPosition;
+  //   }
+  // }, [playheadPosition]);
   
-  // Handle video time update
-  const handleTimeUpdate = () => {
-    if (videoRef.current) {
-      const currentTime = videoRef.current.currentTime;
-      
-      // Update playhead position if it differs significantly from current time
-      if (Math.abs(currentTime - playheadPosition) > 0.1) {
-        dispatch(setPlayheadPosition(currentTime));
+  // EXACT reimplementation of ClipPreview's approach - verbatim from ClipPreview.tsx
+  useEffect(() => {
+    if (!videoRef.current) return;
+    
+    const video = videoRef.current;
+    
+    // Apply hardware acceleration for smoother playback
+    video.style.transform = 'translateZ(0)';
+    video.style.backfaceVisibility = 'hidden';
+    
+    // Ensure maximum performance
+    video.setAttribute('disablePictureInPicture', '');
+    video.preload = 'auto';
+    
+    // Monitor with requestAnimationFrame
+    let animationFrameId: number;
+    let lastUpdate = 0;
+    
+    // Watch for changes and enforce boundaries
+    const checkTimeInRaf = (timestamp: number) => {
+      // Only check every 250ms instead of every frame
+      if (timestamp - lastUpdate > 250 && video.paused === false) {
+        lastUpdate = timestamp;
+        
+        // Update playhead position
+        dispatch(setPlayheadPosition(video.currentTime));
+        
+        // If we've gone past the end of the clip, pause
+        if (video.currentTime >= currentClip.endTime) {
+          video.pause();
+          dispatch(setIsPlaying(false));
+          
+          // Schedule the restart for smoother transition
+          setTimeout(() => {
+            video.currentTime = currentClip.startTime;
+            dispatch(setPlayheadPosition(currentClip.startTime));
+          }, 50);
+        }
       }
       
-      // Check if we reached the clip end during playback
-      if (isPlaying && currentTime >= currentClip.endTime) {
-        videoRef.current.pause();
-        videoRef.current.currentTime = currentClip.startTime;
+      // Continue the animation loop
+      animationFrameId = requestAnimationFrame(checkTimeInRaf);
+    };
+    
+    // Start the animation frame loop
+    animationFrameId = requestAnimationFrame(checkTimeInRaf);
+    
+    // FPS monitoring for display purposes only
+    let frameCount = 0;
+    let lastFpsUpdate = performance.now();
+    
+    const measureFps = () => {
+      frameCount++;
+      const now = performance.now();
+      const elapsed = now - lastFpsUpdate;
+      
+      if (elapsed >= 1000) { // Update every second
+        const fps = Math.round((frameCount * 1000) / elapsed);
+        setPerfStats(prev => ({
+          ...prev,
+          frameCount: prev.frameCount + frameCount,
+          browserFrameRate: fps,
+          lastPlaybackQuality: `Using ClipPreview method: ${fps} FPS`
+        }));
+        
+        frameCount = 0;
+        lastFpsUpdate = now;
+      }
+      
+      requestAnimationFrame(measureFps);
+    };
+    
+    // Start the FPS monitoring
+    const fpsMonitorId = requestAnimationFrame(measureFps);
+    
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      cancelAnimationFrame(fpsMonitorId);
+    };
+  }, [currentClip.startTime, currentClip.endTime, dispatch]);
+  
+  // Empty time update handler - we're using RAF instead
+  const handleTimeUpdate = () => {};
+  
+  // Frame rate detection for frame stepping
+  const [perfStats, setPerfStats] = useState({
+    nativeFrameRate: 30, // Default assumption for video frame rate
+  });
+  
+
+  
+  // Direct copy of ClipPreview's playback approach, which is known to work well
+  const playClip = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    
+    // First pause any existing playback and reset
+    try {
+      video.pause();
+      
+      // Schedule seeking and playback for better performance
+      setTimeout(() => {
+        if (!video) return;
+        
+        // Set currentTime to the clip start time
+        video.currentTime = currentClip.startTime;
+        
+        // Update Redux state *once* now, not during playback
         dispatch(setPlayheadPosition(currentClip.startTime));
-        dispatch(setIsPlaying(false));
-      }
+        
+        // Delay play slightly to ensure the seek completes
+        setTimeout(() => {
+          // Use the play promise properly
+          const playPromise = video.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                // Playback started
+                dispatch(setIsPlaying(true));
+                
+
+              })
+              .catch(err => {
+                console.error('Failed to play clip:', err);
+              });
+          }
+        }, 100);
+      }, 50);
+    } catch (err) {
+      console.error('Failed to play clip:', err);
     }
   };
   
-  // Toggle play/pause
+  // Simplified toggle function that uses ClipPreview's approach
   const togglePlayPause = () => {
     if (!videoRef.current) return;
     
     if (isPlaying) {
+      // Just pause
       videoRef.current.pause();
+      dispatch(setIsPlaying(false));
+      // Playback paused
     } else {
-      // If we're at or past the clip end, loop back to start
-      if (videoRef.current.currentTime >= currentClip.endTime) {
-        videoRef.current.currentTime = currentClip.startTime;
-        dispatch(setPlayheadPosition(currentClip.startTime));
-      }
-      videoRef.current.play();
+      // Use the ClipPreview-style playback
+      playClip();
     }
-    
-    dispatch(setIsPlaying(!isPlaying));
   };
   
   // Handle volume change
@@ -173,7 +415,8 @@ const ClipEditor: React.FC<ClipEditorProps> = ({
   const handleSave = () => {
     const updatedClip = {
       ...currentClip,
-      name: editedName || `Clip ${currentClip.startTime.toFixed(1)}-${currentClip.endTime.toFixed(1)}`
+      name: editedName || `Clip ${currentClip.startTime.toFixed(1)}-${currentClip.endTime.toFixed(1)}`,
+      isEdited: true // Mark as edited
     };
     onSave(updatedClip);
   };
@@ -202,41 +445,86 @@ const ClipEditor: React.FC<ClipEditorProps> = ({
         />
       </div>
       
-      {/* Video player */}
-      <div className="mb-4 bg-black relative" style={{ aspectRatio: '16/9' }}>
-        <video
-          ref={videoRef}
-          src={videoUrl}
-          className="w-full h-full"
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={handleMetadataLoaded}
-          muted={volume === 0}
-        />
-        
-        {/* Play/pause overlay */}
-        <div 
-          className="absolute inset-0 flex items-center justify-center cursor-pointer"
-          onClick={togglePlayPause}
-        >
-          {!isPlaying && (
-            <div className="bg-white bg-opacity-50 rounded-full p-4">
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                width="24" 
-                height="24" 
-                viewBox="0 0 24 24" 
-                fill="currentColor"
-                className="text-gray-800"
-              >
-                <path d="M8 5v14l11-7z" />
+      {/* Video player guidance */}
+      <div className="mb-2 p-2 bg-blue-600 text-white rounded text-sm">
+        Use the timeline below to adjust the start and end times of your clip. Use arrow keys to step frame-by-frame.
+      </div>
+      
+      {/* Video player - EXACT MATCH of ClipPreview's structure */}
+      <div className="relative mb-4">
+        {!isVideoLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-80 text-white z-10">
+            <div className="flex flex-col items-center">
+              <svg className="animate-spin h-8 w-8 text-blue-500 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
+              <span>Loading video...</span>
             </div>
-          )}
-        </div>
+          </div>
+        )}
         
-        {/* Time indicator */}
-        <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm">
-          {formatTime(playheadPosition)} / {formatTime(videoDuration)}
+        {/* Video error display */}
+        {videoError && (
+          <div className="absolute inset-0 bg-red-800 bg-opacity-80 text-white flex flex-col items-center justify-center p-4 z-50">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <h3 className="text-lg font-bold mb-1">Video Error</h3>
+            <p className="text-center">{errorMessage}</p>
+            <button 
+              className="mt-4 bg-white text-red-800 px-4 py-1 rounded font-bold"
+              onClick={() => {
+
+                setIsVideoLoaded(false);
+                setVideoError(false);
+                if (videoRef.current) {
+                  videoRef.current.load();
+                }
+              }}
+            >
+              Try Reload
+            </button>
+          </div>
+        )}
+
+        <div className="relative">
+          {/* EXACT match of ClipPreview's video element */}
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            className="w-full rounded"
+            muted={volume === 0}
+            controls={false} /* Disable browser controls, use our own */
+            playsInline
+            preload="auto"
+            onLoadedMetadata={handleMetadataLoaded}
+            onError={handleVideoError}
+          />
+          
+          {/* Simplified custom controls - EXACT match with ClipPreview */}
+          <div className="absolute inset-0 flex flex-col justify-center items-center">
+            {!isPlaying && (
+              <button 
+                className="bg-blue-500 bg-opacity-80 hover:bg-opacity-100 text-white rounded-full p-4 shadow-lg"
+                onClick={playClip}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
+            )}
+          </div>
+          
+          {/* Time info overlay */}
+          <div className="absolute bottom-3 left-0 right-0 bg-black bg-opacity-50">
+            <div className="flex justify-between px-4 text-white text-sm py-2">
+              <div>Start: {currentClip.startTime.toFixed(1)}s</div>
+              <div>Duration: {(currentClip.endTime - currentClip.startTime).toFixed(1)}s</div>
+              <div>End: {currentClip.endTime.toFixed(1)}s</div>
+            </div>
+          </div>
         </div>
       </div>
       

@@ -13,9 +13,9 @@ function App() {
       <main className="flex-1">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/clips" element={<ClipDetection />} />
           <Route path="/editor" element={<Editor />} />
           <Route path="/export" element={<Export />} />
-          <Route path="/clips" element={<ClipDetection />} />
         </Routes>
       </main>
       <Footer />
