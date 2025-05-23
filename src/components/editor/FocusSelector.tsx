@@ -6,7 +6,6 @@ import {
   removeFocusPoint, 
   updateFocusPoint 
 } from '../../store/slices/focusPointsSlice';
-import { updateCurrentTime } from '../../store/slices/videoSlice';
 import Button from "../common/Button";
 import subjectDetectionService from "../../services/SubjectDetectionService";
 import VideoScannerService from "../../services/VideoScannerService";

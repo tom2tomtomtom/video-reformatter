@@ -464,3 +464,4 @@ class VideoExportService {
 const videoExportService = new VideoExportService();
 export { VideoExportService, ExportProgress };
 export default videoExportService;
+

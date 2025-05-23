@@ -91,3 +91,4 @@ const FocusPointMarker: React.FC<FocusPointMarkerProps> = ({ focusPoint, onDelet
 }
 
 export default FocusPointMarker
+
