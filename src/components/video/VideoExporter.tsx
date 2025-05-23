@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux'
 import { RootState } from '../../store'
 import Button from '../common/Button'
 import videoExportService, { ExportProgress, VideoExportService } from '../../services/VideoExportService'
+import { debugLog } from "../../utils/debug"
 
 // Available export formats
 const EXPORT_FORMATS = [
@@ -37,7 +38,7 @@ const VideoExporter = () => {
         await service.initialize();
         videoExportServiceRef.current = service;
         setIsFFmpegLoaded(true);
-        console.log('Video export service initialised');
+        debugLog('Video export service initialised');
       } catch (error) {
         console.error('Failed to initialise video export service:', error);
         setExportErrors({ init: `Failed to initialise video export service: ${error}` });
@@ -63,7 +64,7 @@ const VideoExporter = () => {
         return;
       }
       
-      console.log('Starting export with letterboxing:', useLetterboxing);
+      debugLog('Starting export with letterboxing:', useLetterboxing);
       
       if (!videoExportServiceRef.current || !isFFmpegLoaded) {
         try {
@@ -72,7 +73,7 @@ const VideoExporter = () => {
           await service.initialize();
           videoExportServiceRef.current = service;
           setIsFFmpegLoaded(true);
-          console.log('Video export service initialised on demand');
+          debugLog('Video export service initialised on demand');
         } catch (error) {
           console.error('Failed to initialise video export service:', error);
           setExportErrors({ init: `Failed to initialise FFmpeg: ${error}` });
@@ -102,10 +103,10 @@ const VideoExporter = () => {
           const focusX = focusPoint ? focusPoint.x : 0.5;
           const focusY = focusPoint ? focusPoint.y : 0.5;
           
-          console.log(`Exporting ${format} with focus point:`, { x: focusX, y: focusY });
+          debugLog(`Exporting ${format} with focus point:`, { x: focusX, y: focusY });
           
           // Export the video
-          console.log(`Exporting ${format} with letterboxing=${useLetterboxing} (${typeof useLetterboxing})`);
+          debugLog(`Exporting ${format} with letterboxing=${useLetterboxing} (${typeof useLetterboxing})`);
           const videoUrl = await videoExportServiceRef.current.exportVideo(
             url,
             {
@@ -164,7 +165,7 @@ const VideoExporter = () => {
   
   // Toggle letterboxing option
   const toggleLetterboxing = (value: boolean) => {
-    console.log(`Setting letterboxing to: ${value} (${typeof value})`);
+    debugLog(`Setting letterboxing to: ${value} (${typeof value})`);
     setUseLetterboxing(value);
   };
   
@@ -325,3 +326,4 @@ const VideoExporter = () => {
 }
 
 export default VideoExporter
+

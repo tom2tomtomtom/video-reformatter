@@ -4,6 +4,7 @@ import { RootState } from '../../store'
 import { FocusPoint as StoreFocusPoint } from '../../store/slices/focusPointsSlice'
 import { store } from '../../store'
 import { recoverVideo } from '../../utils/videoStorage'
+import { debugLog } from "../../utils/debug";
 
 interface DynamicVideoPreviewProps {
   ratio: string
@@ -45,7 +46,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
   
   // Debug Redux state
   useEffect(() => {
-    console.log(`[${ratio}] Redux state:`, {
+    debugLog(`[${ratio}] Redux state:`, {
       url,
       videoId,
       currentTime,
@@ -70,8 +71,8 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
   
   // For debugging - log when props or state changes
   useEffect(() => {
-    console.log(`[${ratio}] Preview - Current focus points: `, points.length);
-    console.log(`[${ratio}] Preview - Current time: `, currentTime);
+    debugLog(`[${ratio}] Preview - Current focus points: `, points.length);
+    debugLog(`[${ratio}] Preview - Current time: `, currentTime);
   }, [points, currentTime, ratio])
   
   // Update active focus point when current time changes
@@ -81,7 +82,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
     ) || null
     
     if (activePoint) {
-      console.log(`[${ratio}] Active focus point at ${currentTime}s:`, activePoint.description);
+      debugLog(`[${ratio}] Active focus point at ${currentTime}s:`, activePoint.description);
     }
     
     setActiveFocusPoint(activePoint)
@@ -89,7 +90,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
   
   // Reset video when URL changes
   useEffect(() => {
-    console.log(`[${ratio}] URL changed, resetting video state`);
+    debugLog(`[${ratio}] URL changed, resetting video state`);
     
     // Reset video state
     setIsVideoReady(false);
@@ -164,9 +165,9 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
     } : { x: 0.5, y: 0.5 }); // Default to center
     
     // Add debug logging for export troubleshooting
-    console.log(`[${ratio}] Focus point: x=${focusToUse.x}, y=${focusToUse.y}`);
-    console.log(`[${ratio}] Source dimensions: ${videoWidth}x${videoHeight}, ratio=${videoWidth/videoHeight}`);
-    console.log(`[${ratio}] Target ratio: ${targetRatio}`);
+    debugLog(`[${ratio}] Focus point: x=${focusToUse.x}, y=${focusToUse.y}`);
+    debugLog(`[${ratio}] Source dimensions: ${videoWidth}x${videoHeight}, ratio=${videoWidth/videoHeight}`);
+    debugLog(`[${ratio}] Target ratio: ${targetRatio}`);
     
     if (letterboxEnabled) {
       // For letterboxing mode:
@@ -187,8 +188,8 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
       const posY = (cropTop + cropHeight/2);
       
       // Log detailed crop information for export troubleshooting
-      console.log(`[${ratio}] LETTERBOX MODE - Square crop: ${cropWidth}% x ${cropHeight}% at (${cropLeft}%, ${cropTop}%)`);
-      console.log(`[${ratio}] Scale: ${Math.max(scaleX, scaleY)}, Position: ${posX}%, ${posY}%`);
+      debugLog(`[${ratio}] LETTERBOX MODE - Square crop: ${cropWidth}% x ${cropHeight}% at (${cropLeft}%, ${cropTop}%)`);
+      debugLog(`[${ratio}] Scale: ${Math.max(scaleX, scaleY)}, Position: ${posX}%, ${posY}%`);
       
       return {
         objectFit: 'cover' as const,
@@ -232,7 +233,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
       }
       
       // Log detailed crop information for export troubleshooting
-      console.log(`[${ratio}] FILL MODE - Scale: ${scaleFactor}, Position: ${xOffset}%, ${yOffset}%`);
+      debugLog(`[${ratio}] FILL MODE - Scale: ${scaleFactor}, Position: ${xOffset}%, ${yOffset}%`);
       
       return {
         position: 'absolute',
@@ -277,12 +278,12 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
   // Set up video element and event listeners
   useEffect(() => {
     if (!videoRef.current) {
-      console.log(`[${ratio}] Video ref not available`);
+      debugLog(`[${ratio}] Video ref not available`);
       return;
     }
     
     if (!url) {
-      console.log(`[${ratio}] No URL provided`);
+      debugLog(`[${ratio}] No URL provided`);
       setIsLoading(false);
       return;
     }
@@ -299,7 +300,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
     const handleCanPlay = () => {
       if (!isMounted) return;
       
-      console.log(`[${ratio}] Video can play! (one-time event)`);
+      debugLog(`[${ratio}] Video can play! (one-time event)`);
       
       // Reset to beginning
       try {
@@ -312,7 +313,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
       if (videoElement.videoWidth && videoElement.videoHeight) {
         setVideoWidth(videoElement.videoWidth);
         setVideoHeight(videoElement.videoHeight);
-        console.log(`[${ratio}] Video dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
+        debugLog(`[${ratio}] Video dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
       }
       
       // Update state
@@ -324,24 +325,24 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
     };
     
     const handleLoad = () => {
-      console.log(`[${ratio}] Load event fired`);
+      debugLog(`[${ratio}] Load event fired`);
     };
     
     const handlePlay = () => {
       if (!isMounted) return;
-      console.log(`[${ratio}] Video playing event`);
+      debugLog(`[${ratio}] Video playing event`);
       setIsPlaying(true);
     };
     
     const handlePause = () => {
       if (!isMounted) return;
-      console.log(`[${ratio}] Video paused event`);
+      debugLog(`[${ratio}] Video paused event`);
       setIsPlaying(false);
     };
     
     const handleEnded = () => {
       if (!isMounted) return;
-      console.log(`[${ratio}] Video ended event`);
+      debugLog(`[${ratio}] Video ended event`);
       setIsPlaying(false);
     };
     
@@ -352,7 +353,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
       
       // Try to reload up to 3 times on error
       if (loadAttempts < 3) {
-        console.log(`[${ratio}] Retrying video load (attempt ${loadAttempts + 1})`);
+        debugLog(`[${ratio}] Retrying video load (attempt ${loadAttempts + 1})`);
         setLoadAttempts(prev => prev + 1);
         
         setTimeout(() => {
@@ -370,7 +371,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
           // Try to recover from storage as last resort
           recoverVideo(videoId).then(recoveredUrl => {
             if (recoveredUrl && isMounted) {
-              console.log(`[${ratio}] Recovered video from storage`);
+              debugLog(`[${ratio}] Recovered video from storage`);
               videoElement.src = recoveredUrl;
               videoElement.load();
             }
@@ -392,7 +393,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
     videoElement.addEventListener('ended', handleEnded);
     
     // Set source and load the video
-    console.log(`[${ratio}] Setting video src:`, url);
+    debugLog(`[${ratio}] Setting video src:`, url);
     try {
       videoElement.crossOrigin = "anonymous";
       videoElement.src = url;
@@ -418,22 +419,22 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
         videoElement.load();
       }
     };
-  }, [url, ratio, videoId, loadAttempts, currentTime]);
+  }, [url, ratio, videoId, loadAttempts]);
   
   // Handle play/pause
   const togglePlayPause = () => {
     if (!videoRef.current || !isVideoReady) {
-      console.log(`[${ratio}] Cannot play/pause - video not ready`);
+      debugLog(`[${ratio}] Cannot play/pause - video not ready`);
       return;
     }
 
     try {
       if (isPlaying) {
-        console.log(`[${ratio}] Pausing video`);
+        debugLog(`[${ratio}] Pausing video`);
         videoRef.current.pause();
         setIsPlaying(false);
       } else {
-        console.log(`[${ratio}] Playing video`);
+        debugLog(`[${ratio}] Playing video`);
         
         // Always reset to beginning when starting playback
         try {
@@ -447,7 +448,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
         if (playPromise !== undefined) {
           playPromise
             .then(() => {
-              console.log(`[${ratio}] Play successful`);
+              debugLog(`[${ratio}] Play successful`);
               setIsPlaying(true);
             })
             .catch(err => {
@@ -463,7 +464,7 @@ const DynamicVideoPreview: React.FC<DynamicVideoPreviewProps> = ({
                   
                   videoRef.current.play()
                     .then(() => {
-                      console.log(`[${ratio}] Play after user interaction successful`);
+                      debugLog(`[${ratio}] Play after user interaction successful`);
                       setIsPlaying(true);
                     })
                     .catch(e => {
